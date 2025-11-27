@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2025 Laminar Contributors
+#
+# Laminar Exclusion List (Smart Mode)
+# Filters only OS junk, keeps build artifacts.
+
+# --- OS & Filesystem Junk ---
+- .DS_Store
+- .AppleDouble
+- .LSOverride
+- Thumbs.db
+- ehthumbs.db
+- Desktop.ini
+- $RECYCLE.BIN/
+- .Trash-*/
+- ._*
+
+# --- Temporary Files ---
+- *.tmp
+- *.temp
+- *.bak
+- *.swp
+- *.swo
+- *~

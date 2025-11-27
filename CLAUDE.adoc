@@ -1,0 +1,276 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Laminar: AI Assistant Guide
+:toc: left
+:toclevels: 3
+:icons: font
+
+== Project Overview
+
+Laminar is a high-velocity cloud-to-cloud streaming relay that transfers data between cloud storage providers (Dropbox, Google Drive, S3, Azure, etc.) without downloading files to local persistent storage.
+
+=== Name Origin
+
+"Laminar" comes from fluid dynamics - *laminar flow* occurs when fluid flows in parallel layers with no disruption between them. This describes the architecture: parallel data streams flowing smoothly from source to destination.
+
+=== Core Philosophy
+
+* **Zero Persistence**: Data flows through RAM, never touches permanent storage
+* **Maximum Parallelism**: Saturate network bandwidth with concurrent streams
+* **Intelligent Routing**: Content-aware decisions (compress text, passthrough media)
+* **Dependability**: Checksums, retries, and checkpoint staging for resilience
+
+== Architecture
+
+=== Components
+
+[source]
+----
+┌─────────────────────────────────────────────────────────────────┐
+│                        LAMINAR SYSTEM                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────┐     ┌─────────────────────────────────┐   │
+│  │  Control Plane  │     │          Data Plane             │   │
+│  │   (Elixir)      │────▶│          (Rclone)               │   │
+│  │                 │     │                                 │   │
+│  │  - GraphQL API  │     │  - Parallel Streams             │   │
+│  │  - Intelligence │     │  - Checksums                    │   │
+│  │  - Pipeline     │     │  - Multi-thread Downloads       │   │
+│  └─────────────────┘     └─────────────────────────────────┘   │
+│           │                           │                        │
+│           ▼                           ▼                        │
+│  ┌─────────────────┐     ┌─────────────────────────────────┐   │
+│  │   Tier 1 (RAM)  │     │      Tier 2 (NVMe Stage)       │   │
+│  │   2GB tmpfs     │     │      Checkpoint Cache          │   │
+│  └─────────────────┘     └─────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+----
+
+=== Key Files
+
+[cols="2,3"]
+|===
+|Path |Purpose
+
+|`.justfile`
+|Command orchestrator - all operations run through `just`
+
+|`cookbook.adoc`
+|Detailed recipes for network tuning, transfer profiles
+
+|`apps/laminar_web/`
+|Elixir/Phoenix application (GraphQL control plane)
+
+|`containers/`
+|Containerfiles for Relay and Refinery images
+
+|`scripts/install.osh`
+|Oil Shell bootstrapper for host setup
+
+|`config/config.json`
+|Runtime configuration
+
+|===
+
+== Development Guidelines
+
+=== Language & Framework Choices
+
+* **Elixir/Phoenix**: Control plane, GraphQL API, concurrent processing
+* **Absinthe**: GraphQL schema and resolvers
+* **Broadway**: Parallel processing pipeline with back-pressure
+* **Rclone**: Data plane - actual file transfers
+* **Oil Shell**: Installation and system scripting
+* **Podman**: Container runtime (rootless)
+
+=== Code Style
+
+* Use `mix format` for Elixir
+* SPDX license headers on all files
+* AsciiDoc for documentation (`.adoc`)
+* Pattern matching over conditionals where possible
+
+=== Testing
+
+[source,bash]
+----
+# Run all tests
+just test
+
+# Run specific test file
+just test-file test/laminar/intelligence_test.exs
+----
+
+== The Intelligence Engine
+
+The `Laminar.Intelligence` module is the decision-making core. It uses Elixir's pattern matching as a declarative rule engine.
+
+=== Actions
+
+[cols="1,3"]
+|===
+|Action |Description
+
+|`:ignore`
+|Skip this file ("bullshit" filter - node_modules, .DS_Store, etc.)
+
+|`{:transfer, :raw, :immediate}`
+|Stream directly (Express Lane)
+
+|`{:link, target}`
+|Create Ghost Link stub instead of transferring
+
+|`{:compress, algo, priority}`
+|Compress with Zstd/Gzip before transfer
+
+|`{:convert, format, priority}`
+|Convert format (WAV→FLAC, BMP→WebP)
+
+|===
+
+=== Adding New Rules
+
+To add support for a new file type:
+
+[source,elixir]
+----
+# In lib/laminar/intelligence.ex
+
+# Add a rule using pattern matching
+defp run_rules(%{extension: ".heic"}, _) do
+  {:convert, :webp, :low_priority}
+end
+----
+
+== Common Tasks
+
+=== Starting Development
+
+[source,bash]
+----
+# Build everything
+just build-all
+
+# Start the relay container
+just up
+
+# Start the control plane (separate terminal)
+just start-brain
+
+# Access GraphQL playground
+open http://localhost:4000/api/graphiql
+----
+
+=== Adding a New Remote
+
+[source,bash]
+----
+# Interactive configuration
+just setup-remotes
+
+# Or use rclone directly
+rclone config
+----
+
+=== Running a Transfer
+
+[source,bash]
+----
+# Via CLI
+just stream dropbox:Source gdrive:Dest
+
+# Via GraphQL
+mutation {
+  startLaminarStream(
+    source: "dropbox:/Photos"
+    destination: "gdrive:/Backup"
+  ) { id status }
+}
+----
+
+== Network Physics
+
+Laminar applies specific network tuning for maximum throughput:
+
+* **TCP BBR**: Congestion control that models bandwidth, not packet loss
+* **GRO On**: Generic Receive Offload for CPU efficiency
+* **LRO Off**: Large Receive Offload disabled for container compatibility
+* **16MB Buffers**: Large TCP windows for high bandwidth-delay product paths
+
+Apply with: `just tune-network`
+
+== The 4-Lane Highway
+
+The Broadway pipeline routes files to different processing lanes:
+
+1. **Ghost Lane**: Creates URL stubs (zero bandwidth)
+2. **Express Lane**: Direct passthrough for media (immediate)
+3. **Squeeze Lane**: Zstd compression for text/data
+4. **Refinery Lane**: Format conversion (CPU intensive)
+
+This ensures the network is never idle - express files flow immediately while refinery files process in the background.
+
+== Troubleshooting
+
+=== Relay Not Starting
+
+[source,bash]
+----
+# Check container status
+podman ps -a
+
+# View logs
+just logs
+
+# Health check
+just health
+----
+
+=== Transfer Stuck
+
+[source,bash]
+----
+# Check active jobs
+just jobs
+
+# View transfer stats
+just status
+----
+
+=== API Not Responding
+
+[source,bash]
+----
+# Verify Elixir is running
+cd apps/laminar_web && mix phx.server
+
+# Check port binding
+lsof -i :4000
+----
+
+== Contributing
+
+1. Read `CONTRIBUTING.adoc`
+2. Fork and create feature branch
+3. Write tests for new functionality
+4. Run `just test` and `just format`
+5. Submit PR with descriptive message
+
+== Security Notes
+
+* Never commit `rclone.conf` (contains API keys)
+* Use environment variables for secrets
+* RC API should be localhost-only in production
+* See `SECURITY.adoc` for full policy
+
+== References
+
+* link:cookbook.adoc[Cookbook] - Detailed tuning recipes
+* link:README.adoc[README] - Quick start guide
+* link:SECURITY.adoc[Security] - Security policy
+* https://rclone.org/docs/[Rclone Documentation]
+* https://hexdocs.pm/phoenix[Phoenix Documentation]
+* https://hexdocs.pm/absinthe[Absinthe GraphQL]

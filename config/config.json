@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "laminar": {
+    "version": "1.0.0",
+    "tiers": {
+      "tier1": {
+        "path": "/mnt/laminar_tier1",
+        "type": "tmpfs",
+        "size": "2G",
+        "description": "RAM Capacitor - Volatile ingestion buffer"
+      },
+      "tier2": {
+        "path": "/mnt/laminar_tier2",
+        "type": "nvme",
+        "description": "NVMe Stage - Checkpoint for resume"
+      }
+    },
+    "rclone": {
+      "rc_url": "http://localhost:5572",
+      "timeout_ms": 60000,
+      "defaults": {
+        "transfers": 32,
+        "checkers": 64,
+        "multi_thread_streams": 8,
+        "buffer_size": "128M",
+        "drive_chunk_size": "128M"
+      }
+    },
+    "pipeline": {
+      "express_concurrency": 32,
+      "ghost_concurrency": 16,
+      "compressed_concurrency": 8,
+      "converted_concurrency": 4
+    },
+    "intelligence": {
+      "ghost_link_threshold_bytes": 5368709120,
+      "massive_file_threshold_bytes": 50000000000,
+      "compression_threshold_bytes": 10000000
+    },
+    "web": {
+      "port": 4000,
+      "host": "localhost"
+    }
+  }
+}

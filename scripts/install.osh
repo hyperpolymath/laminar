@@ -1,0 +1,217 @@
+#!/usr/bin/env osh
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2025 Laminar Contributors
+#
+# Laminar Installer (Oil Shell)
+# Initializes the host environment for Laminar deployment.
+
+const APP_NAME = "Laminar"
+const VERSION = "1.0.0"
+const TIER1_PATH = "/mnt/laminar_tier1"
+const TIER2_PATH = "/mnt/laminar_tier2"
+
+proc log(level, msg) {
+    var timestamp = $(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] [$level] $APP_NAME :: $msg"
+}
+
+proc log_info(msg) {
+    log "INFO" $msg
+}
+
+proc log_warn(msg) {
+    log "WARN" $msg
+}
+
+proc log_error(msg) {
+    log "ERROR" $msg
+}
+
+proc check_root() {
+    if test $(id -u) != "0" {
+        log_error "This script requires root privileges for mounting RAM disks."
+        log_info "Please run: sudo $0"
+        exit 1
+    }
+}
+
+proc check_deps() {
+    log_info "Checking dependencies..."
+    var missing = []
+
+    for cmd in podman just rclone {
+        if not command -v $cmd >/dev/null 2>&1 {
+            call missing->append($cmd)
+        }
+    }
+
+    if (len(missing) > 0) {
+        log_warn "Missing dependencies: $missing"
+        log_info "For Fedora Kinoite: rpm-ostree install podman just"
+        log_info "For other systems: Install via package manager"
+        return 1
+    }
+
+    log_info "All required dependencies found."
+    return 0
+}
+
+proc check_optional_deps() {
+    log_info "Checking optional dependencies..."
+
+    # Check for Elixir (required for control plane)
+    if not command -v elixir >/dev/null 2>&1 {
+        log_warn "Elixir not found. Control plane will not be available."
+        log_info "Install with: rpm-ostree install elixir erlang"
+    }
+
+    # Check for network tools
+    if not command -v ethtool >/dev/null 2>&1 {
+        log_warn "ethtool not found. Network tuning may be limited."
+    }
+}
+
+proc setup_storage_tiers() {
+    log_info "Configuring Storage Physics..."
+
+    # Tier 1: Volatile RAM Capacitor (2GB limit)
+    mkdir -p $TIER1_PATH
+    if mountpoint -q $TIER1_PATH {
+        log_info "Tier 1 (RAM Capacitor) already mounted."
+    } else {
+        log_info "Mounting Tier 1 (RAM Capacitor - 2GB)..."
+        mount -t tmpfs -o size=2G,mode=0700 tmpfs $TIER1_PATH
+        if test $? -eq 0 {
+            log_info "Tier 1 mounted successfully."
+        } else {
+            log_error "Failed to mount Tier 1. Check available RAM."
+            return 1
+        }
+    }
+
+    # Tier 2: NVMe Staging (Persistent directory)
+    mkdir -p $TIER2_PATH
+    chmod 700 $TIER2_PATH
+    log_info "Tier 2 (NVMe Stage) ready at $TIER2_PATH"
+
+    return 0
+}
+
+proc generate_env() {
+    log_info "Generating environment configuration..."
+
+    cat <<EOF > .env
+# Laminar Environment Configuration
+# Generated: $(date)
+
+export LAMINAR_TIER1=$TIER1_PATH
+export LAMINAR_TIER2=$TIER2_PATH
+export RCLONE_RC_URL=http://localhost:5572
+export MIX_ENV=prod
+export SECRET_KEY_BASE=$(head -c 64 /dev/urandom | base64 | tr -d '\n')
+EOF
+
+    chmod 600 .env
+    log_info "Environment file created: .env"
+}
+
+proc setup_rclone_config() {
+    log_info "Setting up Rclone configuration directory..."
+
+    mkdir -p config/rclone
+
+    if test -f config/rclone/rclone.conf {
+        log_info "Rclone configuration already exists."
+    } else {
+        log_warn "No rclone.conf found. Run 'just setup-remotes' to configure."
+        touch config/rclone/rclone.conf
+    }
+}
+
+proc tune_network() {
+    log_info "Applying network optimizations..."
+
+    # Check if BBR is available
+    if modprobe tcp_bbr 2>/dev/null {
+        log_info "TCP BBR module loaded."
+    } else {
+        log_warn "TCP BBR module not available. Using default congestion control."
+        return 0
+    }
+
+    # Create sysctl config
+    cat <<EOF > /etc/sysctl.d/99-laminar.conf
+# Laminar Network Optimizations
+# TCP BBR Congestion Control
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+
+# Large TCP Buffers for high BDP
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 87380 16777216
+EOF
+
+    sysctl -p /etc/sysctl.d/99-laminar.conf >/dev/null 2>&1
+    log_info "Network optimizations applied."
+
+    # Tune NIC if ethtool available
+    if command -v ethtool >/dev/null 2>&1 {
+        var nic = $(ip route get 8.8.8.8 2>/dev/null | awk '{print $5; exit}')
+        if test -n "$nic" {
+            ethtool -K $nic gro on 2>/dev/null || true
+            ethtool -K $nic lro off 2>/dev/null || true
+            log_info "NIC $nic tuned (GRO on, LRO off)."
+        }
+    }
+}
+
+proc print_banner() {
+    echo ""
+    echo "╔═══════════════════════════════════════════════════════════════╗"
+    echo "║                                                               ║"
+    echo "║   ██╗      █████╗ ███╗   ███╗██╗███╗   ██╗ █████╗ ██████╗    ║"
+    echo "║   ██║     ██╔══██╗████╗ ████║██║████╗  ██║██╔══██╗██╔══██╗   ║"
+    echo "║   ██║     ███████║██╔████╔██║██║██╔██╗ ██║███████║██████╔╝   ║"
+    echo "║   ██║     ██╔══██║██║╚██╔╝██║██║██║╚██╗██║██╔══██║██╔══██╗   ║"
+    echo "║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║██║  ██║██║  ██║   ║"
+    echo "║   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═╝   ║"
+    echo "║                                                               ║"
+    echo "║   High-Velocity Cloud Streaming Relay v$VERSION               ║"
+    echo "║                                                               ║"
+    echo "╚═══════════════════════════════════════════════════════════════╝"
+    echo ""
+}
+
+proc print_next_steps() {
+    echo ""
+    log_info "Installation complete!"
+    echo ""
+    echo "Next Steps:"
+    echo "  1. Configure cloud remotes:    just setup-remotes"
+    echo "  2. Build the refinery:         just build-refinery"
+    echo "  3. Start the relay:            just up"
+    echo "  4. (Optional) Start control:   just start-brain"
+    echo ""
+    echo "For help: just --list"
+    echo ""
+}
+
+proc main() {
+    print_banner
+
+    log_info "Initializing $APP_NAME v$VERSION..."
+
+    check_root
+    check_deps || exit 1
+    check_optional_deps
+    setup_storage_tiers || exit 1
+    generate_env
+    setup_rclone_config
+    tune_network
+
+    print_next_steps
+}
+
+main

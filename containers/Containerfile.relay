@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2025 Laminar Contributors
+#
+# Laminar Relay Container (Minimal)
+# Contains only Rclone for basic streaming transfers.
+
+FROM cgr.dev/chainguard/wolfi-base:latest
+
+LABEL org.opencontainers.image.title="Laminar Relay"
+LABEL org.opencontainers.image.description="High-velocity cloud streaming relay"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
+# Install Rclone
+RUN apk add --no-cache \
+    rclone \
+    curl \
+    ca-certificates
+
+# Setup directories
+RUN mkdir -p /config/rclone /cache/ram /cache/nvme
+
+# Copy filter configuration
+COPY rclone/filters.txt /config/rclone/filters.txt
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+    CMD curl -sf http://localhost:5572/ || exit 1
+
+# Expose RC API port
+EXPOSE 5572
+
+# Run as non-root (Chainguard default)
+USER nonroot
+
+# Entrypoint
+ENTRYPOINT ["rclone"]
+CMD ["rcd", "--rc-web-gui", "--rc-addr", ":5572", "--rc-no-auth"]

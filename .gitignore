@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+# Elixir/Mix
+/_build/
+/deps/
+*.ez
+*.beam
+.elixir_ls/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Rclone secrets
+config/rclone/rclone.conf
+
+# Caches
+.cache/
+__pycache__/
+*.pyc
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db
+*~
+
+# Temporary
+*.tmp
+*.log
+*.bak
+
+# Test artifacts
+/cover/

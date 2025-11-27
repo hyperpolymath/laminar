@@ -1,0 +1,347 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Laminar: High-Velocity Cloud Refinery Cookbook
+:toc: left
+:toclevels: 4
+:icons: font
+:source-highlighter: rouge
+
+== 1. The Physics (Network & Infrastructure)
+
+The underlying physics must be tuned before the application logic starts.
+
+=== Recipe 1.1: The Super-Laminar Network Stack
+
+*Target:* Host Machine (Fedora CoreOS / Linux)
+
+*Goal:* Maximize TCP throughput and minimize packet loss panic.
+
+[source,bash]
+----
+# Enable BBR (Bottleneck Bandwidth and Round-trip propagation time)
+echo "net.core.default_qdisc = fq" | sudo tee -a /etc/sysctl.d/99-laminar.conf
+echo "net.ipv4.tcp_congestion_control = bbr" | sudo tee -a /etc/sysctl.d/99-laminar.conf
+
+# Maximize TCP Buffers (16MB for high BDP paths)
+echo "net.core.rmem_max = 16777216" | sudo tee -a /etc/sysctl.d/99-laminar.conf
+echo "net.core.wmem_max = 16777216" | sudo tee -a /etc/sysctl.d/99-laminar.conf
+echo "net.ipv4.tcp_rmem = 4096 87380 16777216" | sudo tee -a /etc/sysctl.d/99-laminar.conf
+echo "net.ipv4.tcp_wmem = 4096 87380 16777216" | sudo tee -a /etc/sysctl.d/99-laminar.conf
+
+# Apply changes
+sudo sysctl -p /etc/sysctl.d/99-laminar.conf
+
+# Tune Coalescence (Enable GRO, Disable LRO for Container Safety)
+sudo ethtool -K eth0 gro on
+sudo ethtool -K eth0 lro off
+----
+
+==== Why BBR?
+
+BBR (Bottleneck Bandwidth and Round-trip propagation time) models the network pipe to pump data at exactly the rate the wire can handle, ignoring "packet loss" that isn't actually congestion. This is critical for cloud-to-cloud transfers where minor packet drops are common but bandwidth is massive.
+
+==== Why GRO On, LRO Off?
+
+* **GRO (Generic Receive Offload):** Allows the CPU to process a bundle of packets as one giant packet. *Good for Speed.*
+* **LRO (Large Receive Offload):** Merges packets so aggressively it can strip headers needed for accurate bridging in Podman/Docker. *Bad for Integrity.*
+
+=== Recipe 1.2: The eDNS "Location Spoofing"
+
+*Target:* Unbound DNS Container
+
+*Goal:* Force Dropbox/Drive to serve data from the local datacenter, not the user's home region.
+
+[source,yaml]
+----
+# unbound.conf
+server:
+  module-config: "iterator"
+  send-client-subnet: yes  # The magic flag
+  cache-min-ttl: 3600      # Aggressive caching
+  prefetch: yes
+  qname-minimisation: yes  # Privacy
+----
+
+==== The Problem
+
+If your Relay is in Frankfurt, but it uses a generic DNS (like 8.8.8.8), Dropbox might think you are in the USA and send data from a US server. This kills performance.
+
+==== The Solution
+
+Run a local recursive DNS resolver (like Unbound) inside the container. It passes the Relay's exact IP subnet to the authority. Dropbox then says, "Oh, you are in Frankfurt Data Center X? Here is the file from the server in the rack next to you."
+
+== 2. The Storage Tiers (Volatile & Persistent)
+
+We use a "Split-Cache" architecture to separate high-speed ingestion from reliable staging.
+
+=== Recipe 2.1: The RAM Capacitor (Tier 1)
+
+[cols="1,3"]
+|===
+|Mount |`/mnt/laminar_tier1`
+|Use |Ingestion buffer, small file compression, transient logic
+|Type |`tmpfs` (RAM Disk)
+|Size |2GB (Strictly limited to prevent OOM)
+|===
+
+[source,bash]
+----
+sudo mkdir -p /mnt/laminar_tier1
+sudo mount -t tmpfs -o size=2G,mode=0700 tmpfs /mnt/laminar_tier1
+----
+
+=== Recipe 2.2: The NVMe Stage (Tier 2)
+
+[cols="1,3"]
+|===
+|Mount |`/mnt/laminar_tier2`
+|Use |Storing processed/encrypted chunks ready for upload
+|Type |Physical NVMe / SSD
+|Logic |If upload fails, resume from here (no re-download, no re-compress)
+|===
+
+[source,bash]
+----
+sudo mkdir -p /mnt/laminar_tier2
+----
+
+== 3. The Logic Engine (Intelligence)
+
+The application does not just "copy"; it makes decisions.
+
+=== Recipe 3.1: The "Bullshit" Filter (Exclusion List)
+
+*Action:* Aggressively ignore derivative artifacts.
+
+[source,text]
+----
+# --- OS & Filesystem Junk ---
+- .DS_Store
+- .AppleDouble
+- .LSOverride
+- Thumbs.db
+- ehthumbs.db
+- Desktop.ini
+- $RECYCLE.BIN/
+- .Trash-*/
+
+# --- Temporary & Cache Data (Regeneratable) ---
+- *.tmp
+- *.log
+- *.bak
+- *.swp
+- *.~*
+- __pycache__/
+- .sass-cache/
+- .cache/
+
+# --- Build Artifacts (Regeneratable via Dependency Managers) ---
+- node_modules/       # npm/yarn (Rebuild: npm install)
+- _build/             # Elixir/Mix (Rebuild: mix deps.get)
+- deps/               # Elixir/Mix
+- target/             # Rust/Cargo (Rebuild: cargo build)
+- vendor/             # Go/PHP (Rebuild: go mod vendor)
+- bin/                # Java/C# compiled binaries
+- obj/                # Intermediate object files
+- .gradle/
+- .idea/              # IDE configs
+- .vscode/
+----
+
+==== Why?
+
+If you move a Node.js project, you move `package.json` (Source) but DELETE `node_modules` (Derivative). You can regenerate `node_modules` on the other side with a single command. Moving it wastes millions of API calls on tiny files.
+
+=== Recipe 3.2: The Ghost Link Strategy
+
+*Action:* Do not move massive archival files. Create a symbolic pointer.
+
+[cols="1,3"]
+|===
+|Threshold |Files > 50GB OR Files in `Archive/` folder
+|Output |Generates `Filename.url` (1KB) on Destination
+|Format |Windows/Linux compatible URL shortcut
+|===
+
+[source,ini]
+----
+[InternetShortcut]
+URL=https://dropbox.com/s/xyz/project_archive.zip
+IconIndex=0
+----
+
+== 4. The Refinery (Conversion Lanes)
+
+Data is optimized *during* transit.
+
+=== Recipe 4.1: The Audio Lane
+
+[cols="1,3"]
+|===
+|Input |`.wav`, `.aiff` (Raw Audio)
+|Process |Convert to FLAC (Free Lossless Audio Codec)
+|Savings |~50% Size Reduction
+|Loss |None (Lossless)
+|===
+
+[source,bash]
+----
+ffmpeg -i input.wav -c:a flac output.flac
+----
+
+=== Recipe 4.2: The Image Lane
+
+[cols="1,3"]
+|===
+|Input |`.bmp`, `.tiff` (Raw Bitmap)
+|Process |Convert to WebP (Lossless Mode)
+|Savings |~30-80% Size Reduction
+|Loss |None (Lossless)
+|===
+
+[source,bash]
+----
+convert input.bmp -define webp:lossless=true output.webp
+----
+
+=== Recipe 4.3: The "Express" Lane
+
+[cols="1,3"]
+|===
+|Input |`.jpg`, `.mp4`, `.zip`, `.docx`
+|Process |Zero-copy Passthrough
+|Logic |These formats are already compressed. Further compression burns CPU for <1% gain.
+|===
+
+=== Recipe 4.4: The Text/Code Lane
+
+[cols="1,3"]
+|===
+|Input |`.txt`, `.json`, `.sql`, `.csv`, `.xml`
+|Process |Zstandard (zstd) compression
+|Savings |~60-90% Size Reduction
+|Speed |Fastest compression algorithm available
+|===
+
+== 5. The Transfer Profiles
+
+=== Recipe 5.1: The "10GB+ File" Recipe
+
+For massive single files, maximize block-level parallelism.
+
+[source,bash]
+----
+rclone copy source: dest: \
+    --transfers 8 \
+    --multi-thread-streams 16 \
+    --multi-thread-cutoff 100M \
+    --buffer-size 256M \
+    --drive-chunk-size 256M \
+    --checksum \
+    --progress
+----
+
+=== Recipe 5.2: The "Million Small Files" Recipe
+
+For lots of tiny files, maximize file-level parallelism.
+
+[source,bash]
+----
+rclone copy source: dest: \
+    --transfers 64 \
+    --checkers 128 \
+    --fast-list \
+    --tpslimit 20 \
+    --buffer-size 16M \
+    --progress
+----
+
+=== Recipe 5.3: The "Low Bandwidth" Recipe
+
+For constrained networks (VPN, mobile tethering).
+
+[source,bash]
+----
+rclone copy source: dest: \
+    --transfers 4 \
+    --bwlimit 10M \
+    --buffer-size 32M \
+    --low-level-retries 10 \
+    --retries 5 \
+    --progress
+----
+
+=== Recipe 5.4: The "Encrypted Transit" Recipe
+
+For sensitive data requiring end-to-end encryption.
+
+[source,bash]
+----
+# First, create a crypt remote in rclone config
+# Then transfer through it:
+rclone copy source: crypt-dest: \
+    --transfers 16 \
+    --checksum \
+    --progress
+----
+
+== 6. The Protocol Decisions
+
+=== Why TCP over QUIC?
+
+For sustained, high-bandwidth "pipes" (like a 50GB file stream), TCP is still superior to QUIC because TCP is optimized in the Kernel, whereas QUIC runs in User Space (burning CPU cycles that Rclone needs for encryption).
+
+=== Why HTTP/2 Multiplexing?
+
+[cols="1,2"]
+|===
+|Old Way (HTTP/1.1) |Open connection -> Send File A -> Wait -> Send File B
+|Laminar Way (HTTP/2) |Open ONE connection. Send chunks of File A, File B, and File C interleaved on the same wire.
+|===
+
+*Benefit:* Eliminates the "Handshake Overhead" (TLS setup time) for every single file.
+
+=== Why Not BitTorrent?
+
+BitTorrent requires *random writes* to stitch together pieces fetched out of order. Cloud APIs expect *sequential streams*. The random write pattern would cause massive latency ("thrashing") on cloud mounts.
+
+We apply BitTorrent *logic* (parallelism, checksums) without the *protocol*.
+
+== 7. Troubleshooting
+
+=== High CPU, Low Throughput
+
+*Cause:* Trying to compress already-compressed files.
+
+*Fix:* Ensure media files (`.mp4`, `.jpg`) go through the Express Lane.
+
+=== API Rate Limiting (429 Errors)
+
+*Cause:* Too many API calls per second.
+
+*Fix:* Reduce `--checkers` and add `--tpslimit 10`.
+
+=== Upload Failures Mid-Transfer
+
+*Cause:* Network instability or cloud provider throttling.
+
+*Fix:* Enable `--retries 5` and use Tier 2 (NVMe) staging so failed uploads resume from checkpoint.
+
+=== Memory Exhaustion (OOM)
+
+*Cause:* Buffer sizes too large for available RAM.
+
+*Fix:* Reduce `--buffer-size` and `--vfs-cache-max-size`.
+
+== 8. Security Checklist
+
+[cols="1,3"]
+|===
+|Item |Status
+|Data never persists to disk |Tier 1 is RAM, Tier 2 is ephemeral checkpoint
+|API keys stored securely |`rclone.conf` mounted as secret, not in image
+|TLS for all transfers |Enforced by cloud provider APIs
+|No data logged |`--log-level ERROR` only
+|Ephemeral containers |Container destroyed after transfer session
+|===

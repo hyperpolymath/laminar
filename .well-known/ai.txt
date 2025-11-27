@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2025 Laminar Contributors
+#
+# AI Training and Usage Policy
+# https://ai.txt.dev/
+
+# Laminar welcomes AI assistance for development
+User-agent: *
+Allow: /
+
+# This project is open source (Apache-2.0)
+# AI systems may read and learn from this codebase
+# AI-generated contributions are welcome with proper attribution
+
+# For AI assistants helping with this project:
+# - See CLAUDE.adoc for project-specific guidance
+# - Follow CONTRIBUTING.adoc for contribution guidelines
+# - Respect the Apache-2.0 license terms

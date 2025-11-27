@@ -1,0 +1,133 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Laminar: High-Velocity Cloud Streaming Relay
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+Laminar is a high-speed, cloud-to-cloud streaming relay that transfers data between cloud storage providers (Dropbox, Google Drive, S3, etc.) without downloading files to local persistent storage. Data flows through RAM buffers in parallel "laminar" streams, achieving maximum throughput while maintaining cryptographic integrity.
+
+=== Why "Laminar"?
+
+In fluid dynamics, *laminar flow* occurs when a fluid flows in parallel layers with no disruption between them. This perfectly describes our architecture: parallel data streams flowing smoothly from source to destination without turbulence (thrashing, random writes, or disk I/O bottlenecks).
+
+== Architecture
+
+[source]
+----
+┌─────────────┐     ┌──────────────────────────────────────┐     ┌─────────────┐
+│   Dropbox   │────▶│          LAMINAR RELAY               │────▶│Google Drive │
+│   (Source)  │     │  ┌─────────┐  ┌─────────────────┐   │     │   (Dest)    │
+└─────────────┘     │  │ RAM     │  │ Elixir Control  │   │     └─────────────┘
+                    │  │ Buffer  │──│ Plane (GraphQL) │   │
+                    │  │ (Tier1) │  └─────────────────┘   │
+                    │  └─────────┘           │            │
+                    │       │                │            │
+                    │  ┌─────────┐  ┌─────────────────┐   │
+                    │  │ NVMe    │  │ Rclone Engine   │   │
+                    │  │ Stage   │──│ (Data Plane)    │   │
+                    │  │ (Tier2) │  └─────────────────┘   │
+                    │  └─────────┘                        │
+                    └──────────────────────────────────────┘
+----
+
+=== Key Components
+
+* **Control Plane**: Elixir + Phoenix + Absinthe (GraphQL API)
+* **Data Plane**: Rclone with optimized parallel streaming
+* **Storage Tiers**: RAM (Tier 1) + NVMe (Tier 2) volatile caching
+* **Container Runtime**: Podman with Chainguard Wolfi base
+* **Network Physics**: TCP BBR, GRO enabled, LRO disabled
+
+== Features
+
+=== Core Capabilities
+
+* **Zero Persistence**: Data never touches permanent storage
+* **Parallel Streaming**: 32+ concurrent transfers with multi-thread streams
+* **Content-Aware Routing**: Text → compression, media → passthrough
+* **Ghost Links**: Create URL stubs for massive files instead of transferring
+* **Refinery Pipeline**: Convert formats on-the-fly (WAV→FLAC, BMP→WebP)
+* **Intelligent Filtering**: Auto-exclude `node_modules/`, build artifacts, OS junk
+
+=== Network Optimizations
+
+* **TCP BBR**: Bottleneck Bandwidth and Round-trip propagation time
+* **eDNS Client Subnet**: Route to nearest CDN edge
+* **Buffer Tuning**: 16MB TCP buffers for high BDP paths
+* **Coalescence**: GRO enabled, LRO disabled for container safety
+
+== Quick Start
+
+[source,bash]
+----
+# 1. Initialize environment (requires root)
+sudo ./scripts/install.osh
+
+# 2. Tune network physics
+just tune-network
+
+# 3. Build the refinery container
+just build-all
+
+# 4. Configure your remotes (interactive)
+just setup-remotes
+
+# 5. Start the relay
+just up
+
+# 6. Start the control plane
+just start-brain
+----
+
+== Usage
+
+=== GraphQL API
+
+[source,graphql]
+----
+mutation {
+  startLaminarStream(
+    source: "dropbox:/Photos"
+    destination: "gdrive:/Backup/Photos"
+    parallelism: 32
+    swarmStreams: 8
+    bufferSize: "128M"
+  ) {
+    id
+    status
+    speed
+    percentage
+  }
+}
+----
+
+=== Direct CLI
+
+[source,bash]
+----
+# Quick transfer
+just stream dropbox:Source gdrive:Dest
+
+# Smart transfer with filtering
+just smart-stream dropbox:Projects gdrive:Backup
+----
+
+== Configuration
+
+See `config/config.json` for runtime configuration and `config/filters.txt` for exclusion rules.
+
+== Documentation
+
+* link:cookbook.adoc[Cookbook] - Detailed recipes and tuning guides
+* link:CLAUDE.adoc[AI Assistant Guide] - For AI-assisted development
+* link:SECURITY.adoc[Security] - Security policies and practices
+* link:CONTRIBUTING.adoc[Contributing] - How to contribute
+
+== License
+
+Apache-2.0. See link:LICENSE.txt[LICENSE.txt] for details.

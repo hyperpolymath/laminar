@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2025 Laminar Contributors
+#
+# Laminar Refinery Container (Full)
+# Contains Rclone + FFmpeg + ImageMagick for format conversion.
+
+FROM cgr.dev/chainguard/wolfi-base:latest
+
+LABEL org.opencontainers.image.title="Laminar Refinery"
+LABEL org.opencontainers.image.description="High-velocity cloud streaming relay with format conversion"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
+# Install tools
+RUN apk add --no-cache \
+    rclone \
+    ffmpeg \
+    imagemagick \
+    zstd \
+    curl \
+    ca-certificates
+
+# Setup directories
+RUN mkdir -p /config/rclone /cache/ram /cache/nvme
+
+# Copy configurations
+COPY rclone/filters.txt /config/rclone/filters.txt
+COPY rclone/filters-smart.txt /config/rclone/filters-smart.txt
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+    CMD curl -sf http://localhost:5572/ || exit 1
+
+# Expose RC API port
+EXPOSE 5572
+
+# Run as non-root
+USER nonroot
+
+# Entrypoint
+ENTRYPOINT ["rclone"]
+CMD ["rcd", "--rc-web-gui", "--rc-addr", ":5572", "--rc-no-auth"]

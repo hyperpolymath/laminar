@@ -1,0 +1,111 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Contributing to Laminar
+:toc:
+
+== Welcome
+
+Thank you for your interest in contributing to Laminar! This document provides guidelines for contributing to the project.
+
+== Code of Conduct
+
+This project follows the link:CODE_OF_CONDUCT.adoc[Contributor Covenant Code of Conduct]. By participating, you agree to uphold this code.
+
+== Getting Started
+
+=== Prerequisites
+
+* Elixir 1.15+
+* Erlang/OTP 26+
+* Podman or Docker
+* Just (command runner)
+* Rclone
+
+=== Development Setup
+
+[source,bash]
+----
+# Clone the repository
+git clone https://github.com/hyperpolymath/laminar.git
+cd laminar
+
+# Install dependencies
+just setup-deps
+
+# Run tests
+just test
+
+# Start development server
+cd apps/laminar_web && iex -S mix phx.server
+----
+
+== How to Contribute
+
+=== Reporting Bugs
+
+1. Check existing issues first
+2. Use the bug report template
+3. Include reproduction steps
+4. Provide system information
+
+=== Suggesting Features
+
+1. Open a discussion first
+2. Describe the use case
+3. Propose a solution
+4. Be open to feedback
+
+=== Pull Requests
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes
+4. Run tests: `just test`
+5. Format code: `just format`
+6. Commit with a descriptive message
+7. Push and open a PR
+
+== Coding Standards
+
+=== Elixir
+
+* Follow the official Elixir style guide
+* Use `mix format` before committing
+* Add `@moduledoc` and `@doc` for public functions
+* Write tests for new functionality
+
+=== Documentation
+
+* Use AsciiDoc (`.adoc`) format
+* Include SPDX license headers
+* Keep README and cookbook updated
+
+=== Commit Messages
+
+Format:
+[source]
+----
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+----
+
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
+
+Example:
+[source]
+----
+feat(intelligence): add support for HEIC image format
+
+- Added HEIC to the image conversion rules
+- Converts to WebP for cross-platform compatibility
+
+Closes #123
+----
+
+== License
+
+By contributing, you agree that your contributions will be licensed under the Apache-2.0 License.

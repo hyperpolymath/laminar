@@ -1,0 +1,12 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* SPDX-FileCopyrightText: 2025 Laminar Contributors */
+
+/* TEAM */
+Project: Laminar
+Description: High-velocity cloud streaming relay
+Repository: https://github.com/hyperpolymath/laminar
+
+/* SITE */
+Last update: 2025-11-27
+Standards: AsciiDoc, Elixir, Rust, Oil Shell
+Components: Phoenix, Absinthe, Broadway, Rclone

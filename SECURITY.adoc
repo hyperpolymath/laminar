@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Security Policy
+:toc:
+
+== Supported Versions
+
+[cols="1,1"]
+|===
+|Version |Supported
+
+|1.x
+|Yes
+
+|< 1.0
+|No
+|===
+
+== Security Model
+
+Laminar is designed with security as a core principle:
+
+=== Data Handling
+
+* **No Persistence**: Data flows through RAM (Tier 1) and ephemeral NVMe cache (Tier 2)
+* **No Logging of Content**: Only metadata (file names, sizes) is logged
+* **Checksums**: All transfers are verified with SHA-256/MD5
+
+=== Authentication
+
+* **Rclone Credentials**: Stored in `rclone.conf`, never in container images
+* **API Keys**: Should be rotated regularly and scoped minimally
+* **No Default Passwords**: RC API authentication must be configured for production
+
+=== Network Security
+
+* **TLS Everywhere**: All cloud provider connections use TLS 1.2+
+* **eDNS Privacy**: `qname-minimisation` enabled in DNS resolver
+* **No Plaintext**: RC API should be accessed via localhost or VPN only
+
+=== Container Security
+
+* **Chainguard Wolfi Base**: Minimal attack surface
+* **Non-root Execution**: Containers run as unprivileged user
+* **Read-only Root**: Configuration mounted, not baked in
+
+== Reporting a Vulnerability
+
+Please report security vulnerabilities privately:
+
+1. **Email**: security@laminar.dev
+2. **Response Time**: Within 48 hours
+3. **Disclosure**: Coordinated disclosure after fix is available
+
+Do NOT open public issues for security vulnerabilities.
+
+== Security Checklist
+
+Before deploying Laminar in production:
+
+* [ ] Configure RC API authentication (`--rc-user`, `--rc-pass`)
+* [ ] Use HTTPS for the control plane
+* [ ] Mount `rclone.conf` as a secret, not in the image
+* [ ] Enable firewall rules to restrict RC API access
+* [ ] Rotate cloud provider API keys regularly
+* [ ] Review exclusion filters to avoid transferring sensitive files

@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2025 Laminar Contributors
+#
+# Laminar Exclusion List (Code Clean Mode)
+# Aggressively filters derivative artifacts that can be regenerated.
+
+# --- OS & Filesystem Junk (The "Bullshit") ---
+- .DS_Store
+- .AppleDouble
+- .LSOverride
+- Thumbs.db
+- ehthumbs.db
+- Desktop.ini
+- $RECYCLE.BIN/
+- .Trash-*/
+- ._*
+
+# --- Temporary & Cache Data (Regeneratable) ---
+- *.tmp
+- *.temp
+- *.log
+- *.bak
+- *.swp
+- *.swo
+- *.~*
+- *~
+- __pycache__/
+- .sass-cache/
+- .cache/
+- .pytest_cache/
+- .mypy_cache/
+- .ruff_cache/
+
+# --- Build Artifacts (Regeneratable via Dependency Managers) ---
+- node_modules/
+- _build/
+- deps/
+- target/
+- vendor/
+- bin/
+- obj/
+- .gradle/
+- build/
+- dist/
+- out/
+
+# --- IDE & Editor Configs (Personal, not project critical) ---
+- .idea/
+- .vscode/
+- *.sublime-*
+- .project
+- .classpath
+- .settings/
+
+# --- Version Control (Already tracked elsewhere) ---
+- .git/
+- .svn/
+- .hg/
+- .bzr/
+
+# --- Package Lock Files (Optional - uncomment if desired) ---
+# - package-lock.json
+# - yarn.lock
+# - Cargo.lock
+# - mix.lock
+# - Gemfile.lock
