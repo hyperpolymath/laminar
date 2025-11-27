@@ -1,0 +1,361 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Architecture Overview
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+This document describes Laminar's system architecture, design decisions, and component interactions.
+
+== System Overview
+
+Laminar is a cloud-to-cloud streaming relay with two distinct planes:
+
+[source]
+----
+┌─────────────────────────────────────────────────────────────────────────┐
+│                            LAMINAR SYSTEM                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌───────────────────────────┐    ┌───────────────────────────────┐    │
+│  │      CONTROL PLANE        │    │        DATA PLANE             │    │
+│  │      (Elixir/OTP)         │    │        (Rclone)               │    │
+│  │                           │    │                               │    │
+│  │  ┌─────────────────────┐  │    │  ┌─────────────────────────┐  │    │
+│  │  │   GraphQL API       │  │    │  │   Rclone RC API         │  │    │
+│  │  │   (Absinthe)        │◄─┼────┼─►│   (JSON-RPC)            │  │    │
+│  │  └─────────────────────┘  │    │  └─────────────────────────┘  │    │
+│  │           │               │    │            │                  │    │
+│  │  ┌─────────────────────┐  │    │  ┌─────────────────────────┐  │    │
+│  │  │   Intelligence      │  │    │  │   Transfer Engine       │  │    │
+│  │  │   Engine            │  │    │  │   (Parallel Streams)    │  │    │
+│  │  └─────────────────────┘  │    │  └─────────────────────────┘  │    │
+│  │           │               │    │            │                  │    │
+│  │  ┌─────────────────────┐  │    │            │                  │    │
+│  │  │   Broadway Pipeline │  │    │            │                  │    │
+│  │  │   (4-Lane Highway)  │  │    │            │                  │    │
+│  │  └─────────────────────┘  │    │            │                  │    │
+│  │                           │    │            │                  │    │
+│  └───────────────────────────┘    └────────────┼──────────────────┘    │
+│                                                │                        │
+│  ┌─────────────────────────────────────────────┼──────────────────────┐ │
+│  │                    STORAGE TIERS            │                      │ │
+│  │                                             ▼                      │ │
+│  │   ┌───────────────┐              ┌───────────────────┐            │ │
+│  │   │   TIER 1      │              │      TIER 2       │            │ │
+│  │   │   (RAM)       │─────────────►│      (NVMe)       │            │ │
+│  │   │   tmpfs 2GB   │              │   Checkpoint      │            │ │
+│  │   └───────────────┘              └───────────────────┘            │ │
+│  │                                                                    │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+----
+
+== Design Principles
+
+=== 1. Zero Persistence
+
+Data should never persist to permanent storage during transfer:
+
+* Tier 1 (RAM): Volatile - lost on power loss
+* Tier 2 (NVMe): Ephemeral checkpoints - cleared after transfer
+
+=== 2. Separation of Concerns
+
+* **Control Plane**: Orchestration, decisions, user interface
+* **Data Plane**: Raw byte movement, cloud API handling
+
+=== 3. Declarative Over Imperative
+
+Use pattern matching and rule engines rather than procedural logic.
+
+=== 4. Parallel by Default
+
+Every operation should maximize concurrent execution.
+
+== Component Architecture
+
+=== Control Plane (Elixir)
+
+==== Application Supervision Tree
+
+[source]
+----
+LaminarWeb.Application
+├── LaminarWeb.Telemetry
+├── Phoenix.PubSub
+├── Finch (HTTP Client Pool)
+└── LaminarWeb.Endpoint
+    ├── Phoenix.Router
+    └── Absinthe.Plug (GraphQL)
+----
+
+==== Key Modules
+
+[cols="2,3"]
+|===
+|Module |Responsibility
+
+|`LaminarWeb.Schema`
+|GraphQL schema definition
+
+|`Laminar.Intelligence`
+|Decision engine (pattern matching rules)
+
+|`Laminar.Pipeline`
+|Broadway-based concurrent processing
+
+|`Laminar.RcloneClient`
+|HTTP client for Rclone RC API
+
+|`Laminar.GhostLinker`
+|Creates URL stub files
+
+|`Laminar.Refinery`
+|Format conversion (FFmpeg, ImageMagick)
+|===
+
+=== Data Plane (Rclone)
+
+Rclone runs as a daemon in a Podman container, exposing the RC API.
+
+==== RC API Endpoints Used
+
+[cols="1,2"]
+|===
+|Endpoint |Purpose
+
+|`sync/copy`
+|Initiate file transfer
+
+|`job/list`
+|List active jobs
+
+|`job/status`
+|Get job progress
+
+|`job/stop`
+|Cancel a job
+
+|`core/stats`
+|Transfer statistics
+
+|`config/listremotes`
+|List configured remotes
+|===
+
+=== Storage Tiers
+
+==== Tier 1: RAM Capacitor
+
+* **Mount**: `/mnt/laminar_tier1`
+* **Type**: `tmpfs`
+* **Size**: 2GB (configurable)
+* **Use**: Hot buffer for active processing
+
+==== Tier 2: NVMe Stage
+
+* **Mount**: `/mnt/laminar_tier2`
+* **Type**: Physical storage (NVMe/SSD)
+* **Use**: Checkpoint cache for resume capability
+
+== Data Flow
+
+=== Standard Transfer Flow
+
+[source]
+----
+1. User Request (GraphQL)
+      │
+      ▼
+2. Control Plane receives request
+      │
+      ▼
+3. Intelligence Engine analyzes files
+      │
+      ├─► :ignore → Skip
+      ├─► {:link, _} → Ghost Linker → Create .url stub
+      ├─► {:compress, _} → Refinery → Compress → Tier 1
+      ├─► {:convert, _} → Refinery → Convert → Tier 1
+      └─► {:transfer, :raw} → Express Lane
+                │
+                ▼
+4. Rclone RC API receives command
+      │
+      ▼
+5. Rclone transfers via cloud APIs
+      │
+      ▼
+6. Progress updates via subscription
+      │
+      ▼
+7. Completion notification
+----
+
+=== Pipeline Architecture (4-Lane Highway)
+
+[source]
+----
+                    ┌─────────────────┐
+                    │   File Scanner  │
+                    │   (Producer)    │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │  Intelligence   │
+                    │  Router         │
+                    └────────┬────────┘
+                             │
+         ┌───────────────────┼───────────────────┐
+         │                   │                   │
+         ▼                   ▼                   ▼
+┌────────────────┐  ┌────────────────┐  ┌────────────────┐
+│   Ghost Lane   │  │  Express Lane  │  │ Refinery Lane  │
+│   (Links)      │  │  (Passthrough) │  │ (Convert/Zip)  │
+│                │  │                │  │                │
+│ Concurrency:16 │  │ Concurrency:32 │  │ Concurrency:4  │
+└────────┬───────┘  └────────┬───────┘  └────────┬───────┘
+         │                   │                   │
+         └───────────────────┴───────────────────┘
+                             │
+                    ┌────────▼────────┐
+                    │    Uploader     │
+                    │    (Batcher)    │
+                    └────────┬────────┘
+                             │
+                    ┌────────▼────────┐
+                    │   Destination   │
+                    │   Cloud Storage │
+                    └─────────────────┘
+----
+
+== Network Architecture
+
+=== Optimizations Applied
+
+1. **TCP BBR**: Congestion control that models bandwidth
+2. **GRO Enabled**: Generic Receive Offload for CPU efficiency
+3. **LRO Disabled**: Large Receive Offload causes container issues
+4. **Large Buffers**: 16MB TCP buffers for high BDP paths
+5. **eDNS**: Client subnet for CDN optimization
+
+=== Connection Model
+
+[source]
+----
+┌──────────────────┐
+│ Laminar Relay    │
+│ (VPS/Container)  │
+└────────┬─────────┘
+         │
+    ┌────┴────┐
+    │ HTTP/2  │ ← Multiplexed connections
+    │ TLS 1.3 │ ← Encrypted transit
+    └────┬────┘
+         │
+    ┌────┴────────────────────┐
+    │                         │
+    ▼                         ▼
+┌────────────┐          ┌────────────┐
+│ Dropbox    │          │ Google     │
+│ API        │          │ Drive API  │
+└────────────┘          └────────────┘
+----
+
+== Security Architecture
+
+=== Credential Handling
+
+* Credentials stored in `rclone.conf` (never in images)
+* Mounted as secrets at runtime
+* Never logged or transmitted
+
+=== Network Security
+
+* All cloud connections use TLS
+* RC API should be localhost-only in production
+* VPN/WireGuard recommended for remote access
+
+=== Container Security
+
+* Non-root execution
+* Chainguard Wolfi minimal base
+* Read-only root filesystem
+
+== Scalability
+
+=== Horizontal Scaling
+
+Run multiple Laminar instances:
+
+[source,bash]
+----
+# Instance 1
+PORT=5572 just up
+# Instance 2
+PORT=5573 just up
+----
+
+=== Vertical Scaling
+
+* Increase `--transfers` for more concurrent files
+* Increase `--multi-thread-streams` for larger files
+* Increase RAM disk for larger buffers
+
+== Technology Stack
+
+[cols="1,2,2"]
+|===
+|Layer |Technology |Why
+
+|Language
+|Elixir
+|Concurrency, fault tolerance, pattern matching
+
+|Web Framework
+|Phoenix
+|Battle-tested, real-time subscriptions
+
+|GraphQL
+|Absinthe
+|Type-safe, introspectable API
+
+|Pipeline
+|Broadway
+|Back-pressure, batching, parallel processing
+
+|HTTP Client
+|Finch
+|High-performance, connection pooling
+
+|Data Plane
+|Rclone
+|40+ cloud providers, proven reliability
+
+|Container
+|Podman
+|Rootless, daemonless, OCI-compliant
+
+|Base Image
+|Chainguard Wolfi
+|Minimal attack surface, supply chain security
+|===
+
+== Future Architecture
+
+=== Planned Enhancements
+
+* **Distributed Mode**: Multiple relay coordination
+* **Persistent Queue**: Redis/PostgreSQL job queue
+* **Web Dashboard**: React/Svelte UI
+* **Plugin System**: Dynamic analyzer loading
+* **Deduplication**: Content-addressable storage
+
+== Next Steps
+
+* link:intelligence.adoc[Intelligence Engine] - Decision logic deep dive
+* link:pipeline.adoc[Pipeline Architecture] - Broadway configuration
+* link:extending.adoc[Extending Laminar] - Adding new capabilities

@@ -1,0 +1,397 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Web Interface Guide
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+Laminar provides web interfaces for both the control plane (GraphQL) and the data plane (Rclone RC).
+
+== Available Interfaces
+
+[cols="1,2,1,1"]
+|===
+|Interface |Purpose |Port |URL
+
+|GraphiQL
+|GraphQL API explorer
+|4000
+|http://localhost:4000/api/graphiql
+
+|Rclone Web GUI
+|Direct Rclone control
+|5572
+|http://localhost:5572
+
+|REST API
+|Simple HTTP endpoints
+|4000
+|http://localhost:4000/api/v1/
+|===
+
+== GraphiQL Interface
+
+The GraphiQL playground is the primary interface for interacting with Laminar.
+
+=== Accessing GraphiQL
+
+[source,bash]
+----
+# Start the control plane
+just start-brain
+
+# Open in browser
+open http://localhost:4000/api/graphiql
+----
+
+=== Interface Layout
+
+[source]
+----
+┌────────────────────────────────────────────────────────────┐
+│  GraphiQL                                    [Docs] [Hist] │
+├────────────────────────┬───────────────────────────────────┤
+│                        │                                   │
+│  Query Editor          │  Results                          │
+│                        │                                   │
+│  query {               │  {                                │
+│    activeStreams {     │    "data": {                      │
+│      id                │      "activeStreams": []          │
+│      status            │    }                              │
+│    }                   │  }                                │
+│  }                     │                                   │
+│                        │                                   │
+├────────────────────────┴───────────────────────────────────┤
+│  Variables                                                 │
+│  {}                                                        │
+└────────────────────────────────────────────────────────────┘
+----
+
+=== Common Queries
+
+==== Check System Health
+
+[source,graphql]
+----
+query {
+  systemHealth {
+    cpuLoad
+    memoryUsed
+    memoryAvailable
+    networkCongestionAlgo
+    tcpRetransmits
+    relayHealthy
+  }
+}
+----
+
+==== List Active Transfers
+
+[source,graphql]
+----
+query {
+  activeStreams {
+    id
+    source
+    destination
+    status
+    speed
+    percentage
+    transferred
+    eta
+  }
+}
+----
+
+==== List Configured Remotes
+
+[source,graphql]
+----
+query {
+  remotes {
+    name
+    type
+  }
+}
+----
+
+=== Common Mutations
+
+==== Start a Transfer
+
+[source,graphql]
+----
+mutation {
+  startLaminarStream(
+    source: "dropbox:/Photos"
+    destination: "gdrive:/Backup/Photos"
+    parallelism: 32
+    swarmStreams: 8
+    bufferSize: "128M"
+    filterMode: CODE_CLEAN
+  ) {
+    id
+    status
+    config {
+      parallelism
+      swarmStreams
+      bufferSize
+    }
+  }
+}
+----
+
+==== Stop a Transfer
+
+[source,graphql]
+----
+mutation {
+  abortStream(jobId: "123")
+}
+----
+
+=== Subscriptions
+
+Subscribe to real-time updates:
+
+[source,graphql]
+----
+subscription {
+  streamProgress(jobId: "123") {
+    id
+    status
+    speed
+    percentage
+    eta
+  }
+}
+----
+
+=== Using Variables
+
+For reusable queries, use variables:
+
+[source,graphql]
+----
+mutation StartTransfer($src: String!, $dst: String!) {
+  startLaminarStream(source: $src, destination: $dst) {
+    id
+    status
+  }
+}
+----
+
+Variables panel:
+[source,json]
+----
+{
+  "src": "dropbox:/Projects",
+  "dst": "gdrive:/Backup/Projects"
+}
+----
+
+== Rclone Web GUI
+
+The Rclone Web GUI provides direct access to the data plane.
+
+=== Accessing Rclone GUI
+
+[source,bash]
+----
+# Start the relay
+just up
+
+# Open in browser
+open http://localhost:5572
+----
+
+=== Features
+
+* **Explorer**: Browse remote file systems
+* **Mounts**: Manage virtual file system mounts
+* **Sync**: Direct sync configuration
+* **Jobs**: View running operations
+* **Config**: Manage remotes (read-only in container)
+
+=== Dashboard
+
+The dashboard shows:
+
+* Active transfers
+* Transfer speed
+* Data transferred
+* Error count
+
+=== Remote Explorer
+
+Browse files in any configured remote:
+
+1. Select remote from dropdown
+2. Navigate folder structure
+3. View file details (size, modified date)
+
+=== Job Monitor
+
+View all running operations:
+
+* Job ID
+* Operation type (copy, sync, move)
+* Source and destination
+* Progress percentage
+* Speed
+* ETA
+
+== REST API
+
+For simple HTTP integrations.
+
+=== Health Check
+
+[source,bash]
+----
+curl http://localhost:4000/api/v1/health
+
+# Response:
+{
+  "status": "healthy",
+  "relay": true,
+  "timestamp": "2025-01-15T10:30:00Z"
+}
+----
+
+=== Transfer Status
+
+[source,bash]
+----
+curl http://localhost:4000/api/v1/status
+
+# Response:
+{
+  "status": "ok",
+  "stats": {
+    "bytes": 1234567890,
+    "speed": 52428800,
+    "transfers": 5,
+    "checks": 10
+  }
+}
+----
+
+=== List Remotes
+
+[source,bash]
+----
+curl http://localhost:4000/api/v1/remotes
+
+# Response:
+{
+  "remotes": ["dropbox:", "gdrive:", "s3:"]
+}
+----
+
+=== Start Transfer
+
+[source,bash]
+----
+curl -X POST http://localhost:4000/api/v1/transfer \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "dropbox:/Photos",
+    "destination": "gdrive:/Backup",
+    "parallelism": 32
+  }'
+
+# Response:
+{
+  "job_id": 123,
+  "source": "dropbox:/Photos",
+  "destination": "gdrive:/Backup",
+  "status": "queued"
+}
+----
+
+== Authentication
+
+=== Development (Default)
+
+No authentication in development mode.
+
+=== Production
+
+==== GraphQL Authentication
+
+Add bearer token authentication:
+
+[source,bash]
+----
+curl -X POST http://localhost:4000/api/graphql \
+  -H "Authorization: Bearer your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ systemHealth { relayHealthy } }"}'
+----
+
+==== Rclone RC Authentication
+
+Enable in container startup:
+
+[source,bash]
+----
+# In .justfile, modify up-refinery:
+rcd --rc-web-gui --rc-addr :5572 \
+    --rc-user admin \
+    --rc-pass your-secure-password
+----
+
+== CORS Configuration
+
+For browser-based applications, CORS is enabled by default.
+
+Configure allowed origins in `config/config.exs`:
+
+[source,elixir]
+----
+config :cors_plug,
+  origin: ["http://localhost:3000", "https://your-app.com"],
+  methods: ["GET", "POST", "OPTIONS"],
+  headers: ["Authorization", "Content-Type"]
+----
+
+== Troubleshooting
+
+=== "Connection Refused"
+
+[source,bash]
+----
+# Check if services are running
+just health
+
+# Restart services
+just restart
+----
+
+=== "CORS Error"
+
+Check browser console. Add your origin to CORS config.
+
+=== "Unauthorized"
+
+Verify authentication credentials match configuration.
+
+=== GraphiQL Not Loading
+
+[source,bash]
+----
+# Check control plane is running
+cd apps/laminar_web && mix phx.server
+
+# Check for errors
+just logs
+----
+
+== Next Steps
+
+* link:transfers.adoc[Transfer Operations] - CLI alternative
+* link:../api-reference/graphql.adoc[GraphQL Reference] - Complete API docs
+* link:../api-reference/rest.adoc[REST Reference] - HTTP endpoint docs

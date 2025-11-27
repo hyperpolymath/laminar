@@ -1,0 +1,361 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Ghost Links Guide
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+Ghost Links are a powerful Laminar feature that creates lightweight URL stubs instead of transferring massive files.
+
+== What Are Ghost Links?
+
+When Laminar encounters a file larger than the configured threshold (default: 5GB), it creates a small `.url` file at the destination instead of transferring the entire file. This "ghost" of the original file contains a link back to the source.
+
+=== Why Use Ghost Links?
+
+[cols="1,3"]
+|===
+|Benefit |Description
+
+|**Save Time**
+|A 50GB file takes hours to transfer; a 1KB ghost link takes milliseconds
+
+|**Save Bandwidth**
+|Archival files rarely accessed don't need to consume transfer quota
+
+|**Save Storage**
+|Pay for one copy, not duplicates across providers
+
+|**Maintain Organization**
+|Your folder structure is preserved with placeholders
+|===
+
+=== Ghost Link Format
+
+Ghost links use the standard Windows/Linux URL shortcut format:
+
+[source,ini]
+----
+[InternetShortcut]
+URL=https://www.dropbox.com/s/abc123/huge_archive.zip
+IconIndex=0
+
+[Laminar]
+OriginalPath=/Archives/2020/huge_archive.zip
+OriginalName=huge_archive.zip
+Note=Original file location stub - use Laminar to restore
+CreatedAt=2025-01-15T10:30:00Z
+----
+
+== How Ghost Links Work
+
+=== Automatic Creation
+
+The Intelligence engine automatically creates ghost links for:
+
+1. Files larger than `ghost_link_threshold_bytes` (default: 5GB)
+2. Files in archive patterns (configurable)
+3. Massive video files marked for cold storage
+
+=== The Process
+
+[source]
+----
+Source: dropbox:/Archives/huge_backup.tar (50GB)
+                    │
+                    ▼
+         ┌──────────────────┐
+         │  Intelligence    │
+         │  Engine Detects  │
+         │  size > 5GB      │
+         └────────┬─────────┘
+                  │
+                  ▼
+         ┌──────────────────┐
+         │  Ghost Linker    │
+         │  1. Get public   │
+         │     share URL    │
+         │  2. Create .url  │
+         │     file (1KB)   │
+         └────────┬─────────┘
+                  │
+                  ▼
+Destination: gdrive:/Archives/huge_backup.tar.url (1KB)
+----
+
+== Configuring Ghost Links
+
+=== Threshold Configuration
+
+In `config/config.json`:
+
+[source,json]
+----
+{
+  "laminar": {
+    "intelligence": {
+      "ghost_link_threshold_bytes": 5368709120,  // 5GB
+      "massive_file_threshold_bytes": 50000000000  // 50GB → cold storage
+    }
+  }
+}
+----
+
+=== Adjusting Threshold
+
+[source,bash]
+----
+# Edit config/config.json
+# Change ghost_link_threshold_bytes to desired value
+
+# 1GB threshold
+"ghost_link_threshold_bytes": 1073741824
+
+# 10GB threshold
+"ghost_link_threshold_bytes": 10737418240
+----
+
+=== Disabling Ghost Links
+
+To disable ghost links and transfer all files:
+
+[source,json]
+----
+{
+  "laminar": {
+    "intelligence": {
+      "ghost_link_threshold_bytes": 0  // 0 = disabled
+    }
+  }
+}
+----
+
+Or bypass Intelligence entirely:
+
+[source,bash]
+----
+# Use rclone directly (no ghost links)
+podman exec laminar rclone copy dropbox: gdrive:
+----
+
+== Using Ghost Links
+
+=== Viewing Ghost Links
+
+Ghost links appear as `.url` files:
+
+[source,bash]
+----
+# List files including ghost links
+podman exec laminar rclone ls gdrive:Backup
+
+# You'll see:
+#     1024 Archives/huge_backup.tar.url
+#     2048 Documents/massive_export.zip.url
+----
+
+=== Opening Ghost Links
+
+**On Windows:**
+Double-click the `.url` file to open in browser
+
+**On Linux:**
+[source,bash]
+----
+xdg-open path/to/file.url
+# or
+cat path/to/file.url | grep URL= | cut -d= -f2 | xargs firefox
+----
+
+**On macOS:**
+[source,bash]
+----
+open path/to/file.url
+----
+
+=== Restoring Full Files
+
+To download the actual file referenced by a ghost link:
+
+[source,bash]
+----
+# Manual: Open URL and download from source provider
+
+# Or use rclone to copy the specific file
+rclone copy dropbox:/Archives/huge_backup.tar ./local/
+----
+
+== Ghost Link Destinations
+
+=== Source Location (Default)
+
+Links point back to the original file location:
+
+[source,ini]
+----
+URL=https://www.dropbox.com/s/abc123/file.tar
+----
+
+=== Cold Storage
+
+For files over `massive_file_threshold_bytes`, links can point to cold storage:
+
+[source,ini]
+----
+URL=rclone://cold-storage/Archives/2020/file.tar
+----
+
+=== Custom Third Location
+
+Configure a third-party location for archives:
+
+[source,elixir]
+----
+# In lib/laminar/intelligence.ex
+defp run_rules(%{extension: ".mkv", size: size}, :archive_mode)
+  when size > @ghost_link_threshold do
+  {:link, "s3://my-glacier-bucket"}
+end
+----
+
+== Identifying Ghost Links
+
+=== File Extension
+
+Ghost links always have `.url` appended:
+
+* Original: `backup.tar.gz`
+* Ghost Link: `backup.tar.gz.url`
+
+=== File Size
+
+Ghost links are tiny (typically < 1KB)
+
+=== Laminar Metadata
+
+The `[Laminar]` section contains:
+
+[cols="1,3"]
+|===
+|Field |Description
+
+|`OriginalPath`
+|Full path in source remote
+
+|`OriginalName`
+|Original filename
+
+|`Note`
+|Human-readable explanation
+
+|`CreatedAt`
+|ISO 8601 timestamp
+|===
+
+== Best Practices
+
+=== When to Use Ghost Links
+
+✅ **Good Use Cases:**
+
+* Archive files rarely accessed
+* Old project backups
+* Large media libraries (original files)
+* Historical data exports
+
+❌ **Avoid Ghost Links For:**
+
+* Frequently accessed files
+* Files needed offline
+* Critical business documents
+* Files you'll need without internet
+
+=== Organizing Ghost Links
+
+Create a clear folder structure:
+
+[source]
+----
+gdrive:Backup/
+├── Active/          # Full files, no ghost links
+├── Archives/        # Mix of small files and ghost links
+└── Cold/            # Mostly ghost links
+----
+
+=== Documenting Ghost Links
+
+Keep a manifest of ghost-linked files:
+
+[source,bash]
+----
+# Generate manifest
+podman exec laminar rclone lsf gdrive:Backup --include "*.url" > ghost-links-manifest.txt
+----
+
+== Troubleshooting
+
+=== "Permission denied" Creating Public Link
+
+Some cloud providers require specific permissions:
+
+**Dropbox:**
+* File must be in a folder that allows sharing
+* Business accounts may restrict sharing
+
+**Google Drive:**
+* Check sharing settings
+* Service accounts may need domain-wide delegation
+
+=== Ghost Link Points to Expired URL
+
+Public share URLs can expire. Solutions:
+
+1. Regenerate the ghost link
+2. Use permanent share links
+3. Consider not ghost-linking frequently-accessed files
+
+=== Want to Convert Ghost Link Back to File
+
+[source,bash]
+----
+# 1. Read the ghost link
+cat file.tar.url | grep URL=
+
+# 2. Download from original source
+rclone copy dropbox:/path/to/file.tar gdrive:/path/to/
+
+# 3. Remove ghost link
+rclone delete gdrive:/path/to/file.tar.url
+----
+
+== API Reference
+
+=== GraphQL: Check if File Would Ghost Link
+
+[source,graphql]
+----
+# Not yet implemented - planned for v1.1
+query {
+  analyzeFile(remote: "dropbox:", path: "/Archives/large.tar") {
+    action
+    reason
+  }
+}
+----
+
+=== Elixir: Intelligence Check
+
+[source,elixir]
+----
+file = %{name: "huge.tar", size: 10_000_000_000, extension: ".tar"}
+action = Laminar.Intelligence.consult_oracle(file)
+# Returns: {:link, :source_location}
+----
+
+== Next Steps
+
+* link:transfers.adoc[Transfer Operations] - Understanding the full transfer flow
+* link:../developer-guide/intelligence.adoc[Intelligence Engine] - Customizing ghost link rules
+* link:../developer-guide/extending.adoc[Extending Laminar] - Adding new link targets

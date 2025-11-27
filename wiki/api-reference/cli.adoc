@@ -1,0 +1,627 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= CLI Reference
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+Complete reference for Laminar's command-line interface via the Justfile.
+
+== Overview
+
+Laminar uses `just` as its command runner. All operations are defined in `.justfile`.
+
+[source,bash]
+----
+# List all available commands
+just --list
+
+# Get help on a specific command
+just --show <recipe>
+----
+
+== Command Categories
+
+[cols="1,3"]
+|===
+|Category |Description
+
+|Setup
+|Installation and configuration
+
+|Build
+|Container and application building
+
+|Network
+|Network optimization
+
+|Deploy
+|Starting and stopping services
+
+|Transfer
+|Data transfer operations
+
+|Operations
+|Monitoring and maintenance
+
+|Development
+|Testing and development tools
+
+|Cleanup
+|Removing artifacts
+|===
+
+== Setup Commands
+
+=== just setup-system
+
+Check and report missing system dependencies.
+
+[source,bash]
+----
+just setup-system
+----
+
+Checks for:
+
+* podman
+* just
+* elixir
+* rclone
+
+=== just setup-deps
+
+Install Elixir dependencies.
+
+[source,bash]
+----
+just setup-deps
+----
+
+Runs:
+
+* `mix local.hex --force`
+* `mix local.rebar --force`
+* `mix deps.get`
+
+=== just setup-remotes
+
+Launch interactive Rclone configuration.
+
+[source,bash]
+----
+just setup-remotes
+----
+
+Opens Rclone's configuration wizard for adding cloud remotes.
+
+=== just setup-tiered-cache
+
+Create the RAM and NVMe cache directories.
+
+[source,bash]
+----
+just setup-tiered-cache
+----
+
+Creates:
+
+* `/mnt/laminar_tier1` (RAM disk, 2GB)
+* `/mnt/laminar_tier2` (NVMe staging)
+* `.env` file with paths
+
+=== just setup
+
+Run complete setup sequence.
+
+[source,bash]
+----
+just setup
+----
+
+Combines: `setup-system` + `setup-deps` + `setup-tiered-cache`
+
+== Build Commands
+
+=== just build-refinery
+
+Build the full Refinery container with conversion tools.
+
+[source,bash]
+----
+just build-refinery
+----
+
+Includes:
+
+* Rclone
+* FFmpeg
+* ImageMagick
+* Zstd
+
+=== just build-relay
+
+Build minimal Relay container (Rclone only).
+
+[source,bash]
+----
+just build-relay
+----
+
+Smaller image, no conversion capability.
+
+=== just build-logic
+
+Compile the Elixir control plane.
+
+[source,bash]
+----
+just build-logic
+----
+
+Runs `mix compile` in production mode.
+
+=== just build-all
+
+Build all components.
+
+[source,bash]
+----
+just build-all
+----
+
+Combines: `build-refinery` + `build-logic`
+
+== Network Commands
+
+=== just tune-network
+
+Apply network optimizations.
+
+[source,bash]
+----
+just tune-network
+----
+
+Applies:
+
+* TCP BBR congestion control
+* Large TCP buffers (16MB)
+* GRO enabled
+* LRO disabled
+
+Requires root privileges.
+
+=== just check-network
+
+Verify network tuning status.
+
+[source,bash]
+----
+just check-network
+----
+
+Shows current:
+
+* Congestion control algorithm
+* Buffer sizes
+* NIC offload settings
+
+== Deploy Commands
+
+=== just up-relay
+
+Start the minimal Relay container.
+
+[source,bash]
+----
+just up-relay
+----
+
+Rclone-only container without conversion tools.
+
+=== just up-refinery
+
+Start the full Refinery container.
+
+[source,bash]
+----
+just up-refinery
+----
+
+Full container with FFmpeg, ImageMagick.
+
+=== just up
+
+Alias for `up-refinery`.
+
+[source,bash]
+----
+just up
+----
+
+=== just start-brain
+
+Start the Elixir control plane.
+
+[source,bash]
+----
+just start-brain
+----
+
+Launches Phoenix server with IEx shell.
+
+=== just down
+
+Stop all Laminar services.
+
+[source,bash]
+----
+just down
+----
+
+Stops and removes containers.
+
+=== just restart
+
+Restart services.
+
+[source,bash]
+----
+just restart
+----
+
+Combines: `down` + `up`
+
+== Transfer Commands
+
+=== just stream <source> <dest>
+
+Basic parallel transfer.
+
+[source,bash]
+----
+just stream dropbox:Photos gdrive:Backup/Photos
+just stream s3:bucket/path b2:bucket/path
+----
+
+Options applied:
+
+* 32 parallel transfers
+* 8 multi-thread streams
+* 128M buffer
+
+=== just smart-stream <source> <dest>
+
+Transfer with intelligent filtering.
+
+[source,bash]
+----
+just smart-stream dropbox:Projects gdrive:Projects
+----
+
+Additional options:
+
+* 64 checkers
+* `--fast-list` enabled
+* `--filter-from filters.txt`
+* `--track-renames`
+* `--checksum`
+
+=== just torrent-stream <source> <dest>
+
+Maximum parallelism transfer.
+
+[source,bash]
+----
+just torrent-stream gdrive:Videos b2:archive
+----
+
+Best for large file collections with high bandwidth.
+
+=== just sync <source> <dest>
+
+Mirror sync (deletes files not in source).
+
+[source,bash]
+----
+just sync dropbox:Master gdrive:Mirror
+----
+
+WARNING: Deletes files in destination not in source.
+
+== Operations Commands
+
+=== just status
+
+Show current transfer statistics.
+
+[source,bash]
+----
+just status
+----
+
+Displays:
+
+* Bytes transferred
+* Speed
+* Active transfers
+* Checks completed
+
+=== just logs
+
+View container logs.
+
+[source,bash]
+----
+just logs
+----
+
+Follows logs continuously (Ctrl+C to exit).
+
+=== just remotes
+
+List configured remotes.
+
+[source,bash]
+----
+just remotes
+----
+
+Shows all Rclone remotes.
+
+=== just health
+
+Check relay health.
+
+[source,bash]
+----
+just health
+----
+
+Returns HEALTHY or DOWN.
+
+=== just jobs
+
+List active transfer jobs.
+
+[source,bash]
+----
+just jobs
+----
+
+Shows job IDs and status.
+
+=== just stop-job <id>
+
+Stop a specific job.
+
+[source,bash]
+----
+just stop-job 123
+----
+
+Aborts the specified job.
+
+== Development Commands
+
+=== just test
+
+Run Elixir tests.
+
+[source,bash]
+----
+just test
+----
+
+=== just test-file <file>
+
+Run specific test file.
+
+[source,bash]
+----
+just test-file test/laminar/intelligence_test.exs
+----
+
+=== just format
+
+Format Elixir code.
+
+[source,bash]
+----
+just format
+----
+
+=== just lint
+
+Run Credo linter.
+
+[source,bash]
+----
+just lint
+----
+
+=== just docs
+
+Generate documentation.
+
+[source,bash]
+----
+just docs
+----
+
+=== just iex
+
+Open IEx shell with application loaded.
+
+[source,bash]
+----
+just iex
+----
+
+== Cleanup Commands
+
+=== just clean
+
+Clean build artifacts.
+
+[source,bash]
+----
+just clean
+----
+
+Removes:
+
+* Elixir build artifacts
+* Container images
+
+=== just clean-all
+
+Deep clean including dependencies.
+
+[source,bash]
+----
+just clean-all
+----
+
+Also removes:
+
+* `deps/` directory
+* `_build/` directory
+
+=== just unmount-cache
+
+Unmount the RAM disk.
+
+[source,bash]
+----
+just unmount-cache
+----
+
+== Utility Commands
+
+=== just completions <shell>
+
+Generate shell completions.
+
+[source,bash]
+----
+just completions bash > ~/.local/share/bash-completion/completions/just
+just completions zsh > ~/.zfunc/_just
+just completions fish > ~/.config/fish/completions/just.fish
+----
+
+=== just validate
+
+Validate configuration files.
+
+[source,bash]
+----
+just validate
+----
+
+Checks:
+
+* `rclone.conf` exists
+* `filters.txt` exists
+* `.env` exists
+
+=== just cache-usage
+
+Show cache disk usage.
+
+[source,bash]
+----
+just cache-usage
+----
+
+Displays Tier 1 and Tier 2 usage.
+
+== Variables
+
+Justfile variables can be overridden:
+
+[source,bash]
+----
+# Override port
+rclone_port=5573 just up
+
+# Override tier paths
+tier1_path=/custom/path just setup-tiered-cache
+----
+
+== Exit Codes
+
+[cols="1,3"]
+|===
+|Code |Meaning
+
+|0
+|Success
+
+|1
+|Command not found or syntax error
+
+|2
+|Recipe failed
+
+|Other
+|Passed from underlying command
+|===
+
+== Examples
+
+=== Full Workflow
+
+[source,bash]
+----
+# 1. Initial setup
+just setup
+
+# 2. Configure remotes
+just setup-remotes
+
+# 3. Build
+just build-all
+
+# 4. Tune network
+sudo just tune-network
+
+# 5. Start relay
+just up
+
+# 6. Start control plane (new terminal)
+just start-brain
+
+# 7. Run transfer
+just smart-stream dropbox:Photos gdrive:Backup
+----
+
+=== Scripting
+
+[source,bash]
+----
+#!/bin/bash
+# backup.sh - Daily backup script
+
+set -e
+
+cd /opt/laminar
+
+# Ensure relay is running
+just health || just up
+
+# Run backup
+just smart-stream dropbox:Work gdrive:Backup/Work
+
+# Check status
+just status
+----
+
+== Next Steps
+
+* link:graphql.adoc[GraphQL API] - Programmatic control
+* link:rest.adoc[REST API] - HTTP endpoints
+* link:../user-guide/transfers.adoc[Transfer Guide] - Usage patterns

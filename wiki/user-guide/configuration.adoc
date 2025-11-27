@@ -1,0 +1,467 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Configuration Guide
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+This guide covers all configuration options for Laminar.
+
+== Configuration Files
+
+Laminar uses several configuration files:
+
+[cols="1,2,1"]
+|===
+|File |Purpose |Format
+
+|`.env`
+|Environment variables
+|Shell
+
+|`config/config.json`
+|Runtime configuration
+|JSON
+
+|`config/rclone/rclone.conf`
+|Cloud remote credentials
+|INI
+
+|`containers/rclone/filters.txt`
+|File exclusion patterns
+|Rclone filter
+|===
+
+== Environment Variables
+
+=== Core Variables
+
+[cols="2,1,3"]
+|===
+|Variable |Default |Description
+
+|`LAMINAR_TIER1`
+|`/mnt/laminar_tier1`
+|Path to RAM disk (volatile cache)
+
+|`LAMINAR_TIER2`
+|`/mnt/laminar_tier2`
+|Path to NVMe staging directory
+
+|`RCLONE_RC_URL`
+|`http://localhost:5572`
+|Rclone Remote Control API URL
+
+|`MIX_ENV`
+|`prod`
+|Elixir environment (dev/test/prod)
+
+|`SECRET_KEY_BASE`
+|Generated
+|Phoenix session encryption key
+|===
+
+=== Setting Environment Variables
+
+Edit `.env` in the project root:
+
+[source,bash]
+----
+# .env
+export LAMINAR_TIER1=/mnt/laminar_tier1
+export LAMINAR_TIER2=/mnt/laminar_tier2
+export RCLONE_RC_URL=http://localhost:5572
+export MIX_ENV=prod
+export SECRET_KEY_BASE=your-64-char-secret-key-here
+----
+
+== Runtime Configuration
+
+=== config/config.json
+
+The main configuration file:
+
+[source,json]
+----
+{
+  "laminar": {
+    "version": "1.0.0",
+    "tiers": {
+      "tier1": {
+        "path": "/mnt/laminar_tier1",
+        "type": "tmpfs",
+        "size": "2G"
+      },
+      "tier2": {
+        "path": "/mnt/laminar_tier2",
+        "type": "nvme"
+      }
+    },
+    "rclone": {
+      "rc_url": "http://localhost:5572",
+      "timeout_ms": 60000,
+      "defaults": {
+        "transfers": 32,
+        "checkers": 64,
+        "multi_thread_streams": 8,
+        "buffer_size": "128M",
+        "drive_chunk_size": "128M"
+      }
+    },
+    "pipeline": {
+      "express_concurrency": 32,
+      "ghost_concurrency": 16,
+      "compressed_concurrency": 8,
+      "converted_concurrency": 4
+    },
+    "intelligence": {
+      "ghost_link_threshold_bytes": 5368709120,
+      "massive_file_threshold_bytes": 50000000000,
+      "compression_threshold_bytes": 10000000
+    },
+    "web": {
+      "port": 4000,
+      "host": "localhost"
+    }
+  }
+}
+----
+
+=== Configuration Reference
+
+==== Tier Configuration
+
+[cols="2,1,3"]
+|===
+|Setting |Type |Description
+
+|`tiers.tier1.path`
+|String
+|Mount point for RAM disk
+
+|`tiers.tier1.size`
+|String
+|Size of RAM disk (e.g., "2G", "4G")
+
+|`tiers.tier2.path`
+|String
+|Path for NVMe/SSD staging
+|===
+
+==== Rclone Defaults
+
+[cols="2,1,1,3"]
+|===
+|Setting |Type |Default |Description
+
+|`transfers`
+|Integer
+|32
+|Number of file transfers in parallel
+
+|`checkers`
+|Integer
+|64
+|Number of checkers to run in parallel
+
+|`multi_thread_streams`
+|Integer
+|8
+|Number of streams per multi-thread download
+
+|`buffer_size`
+|String
+|"128M"
+|In-memory buffer size per transfer
+
+|`drive_chunk_size`
+|String
+|"128M"
+|Chunk size for Google Drive uploads
+|===
+
+==== Pipeline Concurrency
+
+[cols="2,1,1,3"]
+|===
+|Setting |Type |Default |Description
+
+|`express_concurrency`
+|Integer
+|32
+|Concurrent passthrough transfers
+
+|`ghost_concurrency`
+|Integer
+|16
+|Concurrent ghost link creations
+
+|`compressed_concurrency`
+|Integer
+|8
+|Concurrent compression operations
+
+|`converted_concurrency`
+|Integer
+|4
+|Concurrent format conversions
+|===
+
+==== Intelligence Thresholds
+
+[cols="2,1,1,3"]
+|===
+|Setting |Type |Default |Description
+
+|`ghost_link_threshold_bytes`
+|Integer
+|5368709120 (5GB)
+|Files larger than this become Ghost Links
+
+|`massive_file_threshold_bytes`
+|Integer
+|50000000000 (50GB)
+|Files this large go to cold storage
+
+|`compression_threshold_bytes`
+|Integer
+|10000000 (10MB)
+|Text files larger than this get compressed
+|===
+
+== Rclone Configuration
+
+=== Location
+
+Rclone stores remote configurations in:
+
+* **Container**: `/config/rclone/rclone.conf`
+* **Host**: `config/rclone/rclone.conf`
+
+=== Manual Editing
+
+While `just setup-remotes` is recommended, you can edit directly:
+
+[source,ini]
+----
+[dropbox]
+type = dropbox
+token = {"access_token":"...","token_type":"bearer","expiry":"..."}
+
+[gdrive]
+type = drive
+scope = drive
+token = {"access_token":"...","token_type":"Bearer","refresh_token":"..."}
+root_folder_id =
+
+[s3]
+type = s3
+provider = AWS
+access_key_id = AKIAIOSFODNN7EXAMPLE
+secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+region = us-east-1
+----
+
+=== Remote-Specific Options
+
+==== Google Drive
+
+[source,ini]
+----
+[gdrive]
+type = drive
+scope = drive
+# Optional: restrict to specific folder
+root_folder_id = 1ABCdefGHIjklMNOpqrSTUvwxyz
+# Optional: use service account
+service_account_file = /path/to/service-account.json
+# Optional: team drive
+team_drive = 0ABCdefGHIjklMNO
+----
+
+==== Amazon S3
+
+[source,ini]
+----
+[s3]
+type = s3
+provider = AWS
+access_key_id = YOUR_ACCESS_KEY
+secret_access_key = YOUR_SECRET_KEY
+region = us-east-1
+# Optional: specific bucket
+# Use as: s3:bucket-name/path
+----
+
+==== Backblaze B2
+
+[source,ini]
+----
+[b2]
+type = b2
+account = YOUR_ACCOUNT_ID
+key = YOUR_APPLICATION_KEY
+----
+
+== Transfer Profiles
+
+You can create named transfer profiles for common scenarios.
+
+=== Creating a Profile
+
+Add to `config/profiles.json`:
+
+[source,json]
+----
+{
+  "profiles": {
+    "photos": {
+      "source": "dropbox:Photos",
+      "destination": "gdrive:Backup/Photos",
+      "filter_mode": "smart",
+      "parallelism": 16
+    },
+    "code": {
+      "source": "gdrive:Projects",
+      "destination": "s3:code-backup",
+      "filter_mode": "code_clean",
+      "parallelism": 32
+    },
+    "archive": {
+      "source": "dropbox:Archive",
+      "destination": "b2:cold-storage",
+      "ghost_links": true
+    }
+  }
+}
+----
+
+=== Using Profiles
+
+[source,bash]
+----
+# Not yet implemented - coming in v1.1
+# just run-profile photos
+----
+
+== Filter Configuration
+
+See link:filters.adoc[Filter Syntax] for detailed filter configuration.
+
+=== Quick Reference
+
+[source,text]
+----
+# Exclude patterns (prefix with -)
+- node_modules/
+- *.tmp
+- .DS_Store
+
+# Include patterns (prefix with +)
++ *.jpg
++ *.png
+
+# Clear previous rules
+!
+
+# Include everything else
++ **
+----
+
+== Security Configuration
+
+=== Protecting Credentials
+
+Never commit `rclone.conf` to version control:
+
+[source,bash]
+----
+# Already in .gitignore
+config/rclone/rclone.conf
+----
+
+=== Encrypting Configuration
+
+Rclone supports encrypted configuration:
+
+[source,bash]
+----
+# Set configuration password
+rclone config password
+
+# Laminar will prompt for password on startup
+----
+
+=== RC API Authentication
+
+For production, enable authentication:
+
+Edit the container startup in `.justfile`:
+
+[source,makefile]
+----
+up-refinery:
+    podman run -d --name laminar \
+        ...
+        laminar-refinery \
+        rcd --rc-web-gui --rc-addr :5572 \
+        --rc-user admin \
+        --rc-pass your-secure-password
+----
+
+== Advanced Configuration
+
+=== Custom RAM Disk Size
+
+For large transfers, increase Tier 1:
+
+[source,bash]
+----
+sudo umount /mnt/laminar_tier1
+sudo mount -t tmpfs -o size=8G,mode=0700 tmpfs /mnt/laminar_tier1
+----
+
+=== Multiple Instances
+
+Run multiple Laminar instances:
+
+[source,bash]
+----
+# Instance 1 (default ports)
+just up
+
+# Instance 2 (different ports)
+RCLONE_RC_PORT=5573 just up
+----
+
+=== Proxy Configuration
+
+For networks requiring a proxy:
+
+[source,bash]
+----
+# Add to .env
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+export NO_PROXY=localhost,127.0.0.1
+----
+
+== Configuration Validation
+
+Check your configuration is valid:
+
+[source,bash]
+----
+just validate
+
+# Detailed check
+just health
+----
+
+== Next Steps
+
+* link:transfers.adoc[Transfer Operations] - Put your configuration to use
+* link:filters.adoc[Filter Syntax] - Fine-tune what gets transferred
+* link:../operations/security.adoc[Security Hardening] - Production security

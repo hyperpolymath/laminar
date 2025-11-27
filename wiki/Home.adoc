@@ -1,0 +1,126 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Laminar Wiki
+:toc: left
+:toclevels: 2
+:icons: font
+:source-highlighter: rouge
+
+Welcome to the Laminar documentation wiki. This comprehensive guide covers everything from basic usage to advanced development.
+
+== What is Laminar?
+
+Laminar is a **high-velocity cloud-to-cloud streaming relay** that transfers data between cloud storage providers (Dropbox, Google Drive, S3, Azure, OneDrive, and 40+ others) without downloading files to local persistent storage.
+
+=== Key Benefits
+
+* **Zero Local Storage**: Data flows through RAM, never persists to disk
+* **Maximum Speed**: Parallel streams saturate your network bandwidth
+* **Intelligent**: Automatically compresses, converts, or skips files based on content
+* **Secure**: TLS everywhere, no data logging, ephemeral containers
+* **Universal**: Works with any Rclone-supported cloud provider
+
+== Documentation Structure
+
+=== For Users
+
+[cols="1,3"]
+|===
+|Guide |Description
+
+|link:user-guide/getting-started.adoc[Getting Started]
+|Installation, setup, and your first transfer
+
+|link:user-guide/configuration.adoc[Configuration]
+|Configuring remotes, filters, and preferences
+
+|link:user-guide/transfers.adoc[Running Transfers]
+|All the ways to move your data
+
+|link:user-guide/filters.adoc[Filter Syntax]
+|Include/exclude patterns for precise control
+
+|link:user-guide/ghost-links.adoc[Ghost Links]
+|Creating URL stubs for massive files
+
+|link:user-guide/web-ui.adoc[Web Interface]
+|Using the GraphQL playground and dashboard
+|===
+
+=== For Developers
+
+[cols="1,3"]
+|===
+|Guide |Description
+
+|link:developer-guide/architecture.adoc[Architecture Overview]
+|System design, components, and data flow
+
+|link:developer-guide/intelligence.adoc[Intelligence Engine]
+|The decision-making rule system
+
+|link:developer-guide/pipeline.adoc[Pipeline Architecture]
+|Broadway-based concurrent processing
+
+|link:developer-guide/extending.adoc[Extending Laminar]
+|Adding new file types, converters, and rules
+
+|link:developer-guide/testing.adoc[Testing Guide]
+|Running and writing tests
+
+|link:developer-guide/contributing.adoc[Contributing]
+|How to submit changes
+|===
+
+=== API Reference
+
+[cols="1,3"]
+|===
+|Reference |Description
+
+|link:api-reference/graphql.adoc[GraphQL API]
+|Complete schema documentation
+
+|link:api-reference/rest.adoc[REST API]
+|Fallback HTTP endpoints
+
+|link:api-reference/cli.adoc[CLI Reference]
+|All Justfile recipes and flags
+
+|link:api-reference/rclone-rc.adoc[Rclone RC API]
+|Internal Rclone remote control interface
+|===
+
+=== Operations
+
+[cols="1,3"]
+|===
+|Guide |Description
+
+|link:operations/deployment.adoc[Deployment Guide]
+|Production deployment strategies
+
+|link:operations/networking.adoc[Network Tuning]
+|TCP/IP optimization for maximum throughput
+
+|link:operations/monitoring.adoc[Monitoring]
+|Metrics, logging, and alerting
+
+|link:operations/troubleshooting.adoc[Troubleshooting]
+|Common issues and solutions
+
+|link:operations/security.adoc[Security Hardening]
+|Locking down your installation
+|===
+
+== Quick Links
+
+* link:../README.adoc[README] - Project overview
+* link:../cookbook.adoc[Cookbook] - Detailed recipes
+* link:../CLAUDE.adoc[AI Guide] - For AI-assisted development
+* https://github.com/hyperpolymath/laminar[GitHub Repository]
+
+== Version
+
+This documentation is for Laminar **v1.0.0**.

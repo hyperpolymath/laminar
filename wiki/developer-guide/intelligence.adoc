@@ -1,0 +1,402 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Intelligence Engine
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+The Intelligence Engine is Laminar's decision-making core. It uses Elixir's pattern matching as a high-performance declarative rule system.
+
+== Overview
+
+The `Laminar.Intelligence` module receives file metadata and returns an action:
+
+[source,elixir]
+----
+file = %{name: "video.mp4", size: 500_000_000, extension: ".mp4"}
+action = Laminar.Intelligence.consult_oracle(file)
+# Returns: {:transfer, :raw, :immediate}
+----
+
+== Why Pattern Matching?
+
+=== Alternative: External Logic Solvers
+
+Languages like Prolog or miniKanren offer declarative logic programming. However:
+
+* **Overhead**: Inter-process communication adds latency
+* **Complexity**: Additional dependency to manage
+* **Debugging**: Harder to trace rule execution
+
+=== Elixir's Pattern Matching
+
+Elixir's pattern matching provides:
+
+* **Performance**: Compiled to efficient BEAM bytecode
+* **Readability**: Rules read like natural language
+* **Debugging**: Standard Elixir tooling (IEx, Observer)
+* **Integration**: No serialization between systems
+
+== Actions
+
+The engine returns one of these action types:
+
+[cols="1,3,2"]
+|===
+|Action |Description |Example
+
+|`:ignore`
+|Skip this file entirely
+|OS junk, build artifacts
+
+|`{:transfer, :raw, :immediate}`
+|Stream directly (Express Lane)
+|Already-compressed media
+
+|`{:link, target}`
+|Create Ghost Link stub
+|Files > 5GB
+
+|`{:compress, algo, priority}`
+|Compress before transfer
+|Large text files
+
+|`{:convert, format, priority}`
+|Convert format
+|WAV → FLAC
+|===
+
+== Priorities
+
+Actions include a priority for pipeline scheduling:
+
+[cols="1,3"]
+|===
+|Priority |Meaning
+
+|`:immediate`
+|Start now, Express Lane
+
+|`:high_priority`
+|Process soon
+
+|`:medium_priority`
+|Standard queue
+
+|`:low_priority`
+|Background processing (CPU-heavy)
+|===
+
+== Rule Structure
+
+Rules are implemented as pattern-matching function clauses:
+
+[source,elixir]
+----
+defmodule Laminar.Intelligence do
+  # Rule structure:
+  # defp run_rules(%{field: value}, ruleset) when guard, do: action
+
+  # Example: Ignore .tmp files
+  defp run_rules(%{extension: ".tmp"}, _), do: :ignore
+
+  # Example: Ghost link for large files
+  defp run_rules(%{size: size}, _) when size > 5_368_709_120 do
+    {:link, :source_location}
+  end
+
+  # Default: transfer as-is
+  defp run_rules(_, _), do: {:transfer, :raw, :immediate}
+end
+----
+
+== Current Rules
+
+=== Ignore Rules (Bullshit Filter)
+
+[source,elixir]
+----
+# OS junk
+defp run_rules(%{extension: ext}, _)
+  when ext in ~w(.tmp .log .bak .DS_Store Thumbs.db), do: :ignore
+
+# Build artifacts
+defp run_rules(%{name: name}, _)
+  when name in ~w(node_modules _build target deps vendor .git), do: :ignore
+
+# IDE/Cache
+defp run_rules(%{name: name}, _)
+  when name in ~w(__pycache__ .sass-cache .cache .idea .vscode), do: :ignore
+----
+
+=== Ghost Link Rules
+
+[source,elixir]
+----
+# Files > 5GB become ghost links
+defp run_rules(%{size: size}, _) when size > @ghost_link_threshold do
+  {:link, :source_location}
+end
+
+# Massive RAW video to cold storage
+defp run_rules(%{extension: ".r3d", size: size}, _)
+  when size > @massive_file_threshold do
+  {:link, :cold_storage}
+end
+----
+
+=== Conversion Rules
+
+[source,elixir]
+----
+# Audio: WAV/AIFF → FLAC
+defp run_rules(%{extension: ext}, _) when ext in ~w(.wav .aiff .aif) do
+  {:convert, :flac, :medium_priority}
+end
+
+# Image: BMP/TIFF → WebP
+defp run_rules(%{extension: ext}, _) when ext in ~w(.bmp .tiff .tif) do
+  {:convert, :webp, :low_priority}
+end
+----
+
+=== Compression Rules
+
+[source,elixir]
+----
+# Large SQL dumps
+defp run_rules(%{extension: ".sql", size: size}, _) when size > 10_000_000 do
+  {:compress, :zstd, :high_priority}
+end
+
+# Large CSV files
+defp run_rules(%{extension: ".csv", size: size}, _) when size > 10_000_000 do
+  {:compress, :zstd, :high_priority}
+end
+----
+
+=== Passthrough Rules (Express Lane)
+
+[source,elixir]
+----
+# Already-compressed video
+defp run_rules(%{extension: ext}, _)
+  when ext in ~w(.mp4 .mkv .avi .mov .webm), do: {:transfer, :raw, :immediate}
+
+# Already-compressed images
+defp run_rules(%{extension: ext}, _)
+  when ext in ~w(.jpg .jpeg .png .gif .webp), do: {:transfer, :raw, :immediate}
+
+# Already-compressed audio
+defp run_rules(%{extension: ext}, _)
+  when ext in ~w(.mp3 .aac .flac .ogg .opus), do: {:transfer, :raw, :immediate}
+
+# Archives
+defp run_rules(%{extension: ext}, _)
+  when ext in ~w(.zip .tar .gz .7z .rar .xz), do: {:transfer, :raw, :immediate}
+
+# Office documents (already compressed internally)
+defp run_rules(%{extension: ext}, _)
+  when ext in ~w(.docx .xlsx .pptx .pdf), do: {:transfer, :raw, :immediate}
+
+# Source code (keep integrity)
+defp run_rules(%{extension: ext}, _)
+  when ext in ~w(.ex .exs .rs .go .py .js .ts .rb), do: {:transfer, :raw, :immediate}
+----
+
+== Adding New Rules
+
+=== Step 1: Identify the Pattern
+
+What file characteristics should trigger your rule?
+
+* Extension: `.heic`, `.nef`
+* Size: > 1GB
+* Name: Contains `archive`
+* MIME type: `video/*`
+
+=== Step 2: Write the Rule
+
+Add a new function clause **before** the default rule:
+
+[source,elixir]
+----
+# In lib/laminar/intelligence.ex
+
+# Add this BEFORE the default rule
+defp run_rules(%{extension: ".heic"}, _) do
+  {:convert, :webp, :low_priority}
+end
+
+# HEIC photos from iPhones → WebP
+# (Add above the default rule)
+----
+
+=== Step 3: Add Tests
+
+[source,elixir]
+----
+# In test/laminar/intelligence_test.exs
+
+test "converts HEIC to WebP" do
+  heic_file = %{name: "IMG_001.heic", size: 5_000_000, extension: ".heic"}
+  assert {:convert, :webp, :low_priority} = Intelligence.consult_oracle(heic_file)
+end
+----
+
+=== Step 4: Run Tests
+
+[source,bash]
+----
+just test
+----
+
+== Rulesets
+
+The engine supports different rulesets for different scenarios:
+
+[source,elixir]
+----
+def consult_oracle(file_metadata, ruleset \\ :default)
+
+# Available rulesets:
+# :default - Standard rules
+# :archive_mode - More aggressive ghost linking
+# :code_clean - Extra filtering for code projects
+# :full_refinery - Maximum conversion
+----
+
+=== Using Rulesets
+
+[source,elixir]
+----
+# Archive mode: more ghost links
+action = Intelligence.consult_oracle(file, :archive_mode)
+
+# Code clean: extra artifact filtering
+action = Intelligence.consult_oracle(file, :code_clean)
+----
+
+== Batch Processing
+
+For efficiency, process multiple files at once:
+
+[source,elixir]
+----
+files = [
+  %{name: "app.js", size: 1000, extension: ".js"},
+  %{name: "node_modules", size: 0, extension: ""},
+  %{name: "huge.tar", size: 10_000_000_000, extension: ".tar"}
+]
+
+partitioned = Intelligence.partition_files(files)
+# Returns:
+# %{
+#   transfer: [%{name: "app.js", ...}],
+#   ignore: [%{name: "node_modules", ...}],
+#   link: [%{name: "huge.tar", ...}],
+#   convert: [],
+#   compress: []
+# }
+----
+
+== Rule Evaluation Order
+
+Rules are evaluated **top to bottom** in the source file:
+
+1. First matching rule wins
+2. More specific rules should come first
+3. Default (catch-all) rule comes last
+
+[source,elixir]
+----
+# ✅ CORRECT: Specific before general
+defp run_rules(%{extension: ".wav", size: s}, _) when s > 1_000_000_000 do
+  {:link, :source_location}  # >1GB WAV files get linked
+end
+
+defp run_rules(%{extension: ".wav"}, _) do
+  {:convert, :flac, :medium_priority}  # Smaller WAV files get converted
+end
+
+# ❌ WRONG: General before specific (second rule never matches)
+defp run_rules(%{extension: ".wav"}, _), do: {:convert, :flac, :medium_priority}
+defp run_rules(%{extension: ".wav", size: s}, _) when s > 1_000_000_000, do: {:link, :source_location}
+----
+
+== Debugging Rules
+
+=== IEx Exploration
+
+[source,elixir]
+----
+iex> alias Laminar.Intelligence
+iex> file = %{name: "test.wav", size: 50_000_000, extension: ".wav"}
+iex> Intelligence.consult_oracle(file)
+{:convert, :flac, :medium_priority}
+----
+
+=== Tracing
+
+[source,elixir]
+----
+# Enable tracing in IEx
+iex> :dbg.tracer()
+iex> :dbg.p(:all, :c)
+iex> :dbg.tpl(Laminar.Intelligence, :run_rules, :x)
+
+# Now call the function and see which clause matched
+iex> Intelligence.consult_oracle(%{extension: ".wav", size: 100})
+----
+
+== Performance
+
+=== Benchmarks
+
+Pattern matching is extremely fast:
+
+[source,elixir]
+----
+# Benchmark 10,000 files
+files = for _ <- 1..10_000, do: random_file_metadata()
+{time, _} = :timer.tc(fn ->
+  Enum.each(files, &Intelligence.consult_oracle/1)
+end)
+IO.puts("10,000 files in #{time / 1000}ms")
+# Typical: 10,000 files in ~5ms
+----
+
+=== Optimization Tips
+
+1. **Order by frequency**: Put common cases first
+2. **Avoid complex guards**: Keep guards simple
+3. **Batch when possible**: Use `partition_files/2`
+
+== Integration with Pipeline
+
+The Pipeline uses Intelligence to route files:
+
+[source,elixir]
+----
+# In lib/laminar/pipeline.ex
+def handle_message(:default, message, context) do
+  file = message.data
+  action = Intelligence.consult_oracle(file)
+
+  case action do
+    :ignore -> Broadway.Message.failed(message, :ignored)
+    {:link, _} -> Broadway.Message.put_batcher(message, :ghost)
+    {:transfer, :raw, :immediate} -> Broadway.Message.put_batcher(message, :express)
+    {:compress, _, _} -> Broadway.Message.put_batcher(message, :compressed)
+    {:convert, _, _} -> Broadway.Message.put_batcher(message, :converted)
+  end
+end
+----
+
+== Next Steps
+
+* link:pipeline.adoc[Pipeline Architecture] - How actions become transfers
+* link:extending.adoc[Extending Laminar] - Adding new converters
+* link:../api-reference/graphql.adoc[GraphQL API] - Exposing intelligence decisions

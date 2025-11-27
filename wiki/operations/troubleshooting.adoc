@@ -1,0 +1,528 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Troubleshooting Guide
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+Solutions for common Laminar issues.
+
+== Quick Diagnostics
+
+Run these commands first:
+
+[source,bash]
+----
+# Check overall health
+just health
+
+# Check container status
+podman ps -a
+
+# View recent logs
+just logs
+
+# Validate configuration
+just validate
+----
+
+== Installation Issues
+
+=== "just: command not found"
+
+Install just:
+
+[source,bash]
+----
+# Fedora
+sudo dnf install just
+
+# Ubuntu/Debian
+cargo install just
+
+# macOS
+brew install just
+----
+
+=== "podman: command not found"
+
+Install Podman:
+
+[source,bash]
+----
+# Fedora
+sudo dnf install podman
+
+# Ubuntu
+sudo apt install podman
+
+# macOS
+brew install podman
+----
+
+=== RAM disk mount fails
+
+Check available memory:
+
+[source,bash]
+----
+free -h
+----
+
+Reduce size if needed:
+
+[source,bash]
+----
+sudo mount -t tmpfs -o size=1G,mode=0700 tmpfs /mnt/laminar_tier1
+----
+
+=== Permission denied during setup
+
+Run with sudo:
+
+[source,bash]
+----
+sudo ./scripts/install.osh
+----
+
+== Container Issues
+
+=== Container won't start
+
+Check for port conflicts:
+
+[source,bash]
+----
+lsof -i :5572
+----
+
+Kill conflicting process or change port:
+
+[source,bash]
+----
+# Use different port
+rclone_port=5573 just up
+----
+
+=== Container exits immediately
+
+View logs:
+
+[source,bash]
+----
+podman logs laminar
+----
+
+Common causes:
+
+* Missing `rclone.conf`
+* Invalid configuration
+* Port already in use
+
+=== "Error: no such container"
+
+Container not running. Start it:
+
+[source,bash]
+----
+just up
+----
+
+=== Old container interfering
+
+Remove existing container:
+
+[source,bash]
+----
+podman rm -f laminar
+podman rm -f laminar-relay
+just up
+----
+
+== Connection Issues
+
+=== "Connection refused" to Rclone RC
+
+Relay not running:
+
+[source,bash]
+----
+just health
+# If DOWN:
+just up
+----
+
+=== Rclone can't reach cloud provider
+
+1. Check internet connectivity:
+[source,bash]
+----
+curl -I https://www.dropbox.com
+curl -I https://www.googleapis.com
+----
+
+2. Check proxy settings:
+[source,bash]
+----
+echo $HTTP_PROXY
+echo $HTTPS_PROXY
+----
+
+3. Check firewall:
+[source,bash]
+----
+sudo firewall-cmd --list-all
+----
+
+=== OAuth token expired
+
+Re-authenticate:
+
+[source,bash]
+----
+just setup-remotes
+# Select the remote and reconfigure
+----
+
+=== "Permission denied" from cloud provider
+
+* Check API quota limits
+* Verify credentials haven't been revoked
+* Ensure correct scopes were granted during OAuth
+
+== Transfer Issues
+
+=== Transfer stuck at 0%
+
+Check if files match filter:
+
+[source,bash]
+----
+podman exec laminar rclone ls dropbox:Path --dry-run
+----
+
+Check file exists:
+
+[source,bash]
+----
+podman exec laminar rclone lsf dropbox:Path
+----
+
+=== Very slow transfer
+
+1. Check network:
+[source,bash]
+----
+speedtest-cli
+----
+
+2. Apply network tuning:
+[source,bash]
+----
+sudo just tune-network
+----
+
+3. Reduce parallelism for slow connections:
+[source,bash]
+----
+podman exec laminar rclone copy src: dst: --transfers 4 --bwlimit 10M
+----
+
+=== Transfer fails mid-way
+
+Enable retries:
+
+[source,bash]
+----
+podman exec laminar rclone copy src: dst: --retries 5 --low-level-retries 10
+----
+
+Resume from checkpoint (just re-run):
+
+[source,bash]
+----
+just stream src: dst:
+# Rclone automatically skips completed files
+----
+
+=== "Rate limit exceeded"
+
+Add rate limiting:
+
+[source,bash]
+----
+podman exec laminar rclone copy src: dst: --tpslimit 10
+----
+
+Reduce checkers:
+
+[source,bash]
+----
+podman exec laminar rclone copy src: dst: --checkers 8
+----
+
+=== Files getting skipped
+
+Check exclusion filters:
+
+[source,bash]
+----
+cat containers/rclone/filters.txt
+----
+
+Test with no filters:
+
+[source,bash]
+----
+just stream src: dst:  # Uses no filters
+----
+
+=== Checksum mismatch errors
+
+Force re-transfer:
+
+[source,bash]
+----
+podman exec laminar rclone copy src: dst: --ignore-checksum
+----
+
+Or verify and fix:
+
+[source,bash]
+----
+podman exec laminar rclone check src: dst: --download
+----
+
+== Control Plane Issues
+
+=== Phoenix won't start
+
+Check Elixir installed:
+
+[source,bash]
+----
+elixir --version
+----
+
+Get dependencies:
+
+[source,bash]
+----
+just setup-deps
+----
+
+=== "Connection refused" to GraphQL
+
+Start the control plane:
+
+[source,bash]
+----
+just start-brain
+----
+
+Check port:
+
+[source,bash]
+----
+lsof -i :4000
+----
+
+=== Compilation errors
+
+Clean and rebuild:
+
+[source,bash]
+----
+just clean-all
+just setup-deps
+just build-logic
+----
+
+=== "Dependencies out of date"
+
+Update dependencies:
+
+[source,bash]
+----
+cd apps/laminar_web
+mix deps.update --all
+----
+
+== Performance Issues
+
+=== High CPU during transfer
+
+Likely compressing already-compressed files. Check:
+
+[source,bash]
+----
+# See what's being processed
+just logs | grep -i compress
+----
+
+Bypass Intelligence:
+
+[source,bash]
+----
+# Direct rclone (no conversion/compression)
+podman exec laminar rclone copy src: dst:
+----
+
+=== Running out of RAM
+
+Reduce buffer sizes:
+
+[source,bash]
+----
+podman exec laminar rclone copy src: dst: \
+  --buffer-size 32M \
+  --vfs-cache-max-size 500M
+----
+
+Reduce parallelism:
+
+[source,bash]
+----
+podman exec laminar rclone copy src: dst: --transfers 8
+----
+
+=== Tier 1 cache full
+
+Clear the cache:
+
+[source,bash]
+----
+sudo rm -rf /mnt/laminar_tier1/*
+----
+
+Or increase size:
+
+[source,bash]
+----
+sudo umount /mnt/laminar_tier1
+sudo mount -t tmpfs -o size=4G,mode=0700 tmpfs /mnt/laminar_tier1
+----
+
+== Network Tuning Issues
+
+=== BBR not loading
+
+Check kernel support:
+
+[source,bash]
+----
+cat /proc/sys/net/ipv4/tcp_available_congestion_control
+----
+
+Load module:
+
+[source,bash]
+----
+sudo modprobe tcp_bbr
+----
+
+=== GRO/LRO errors
+
+Your NIC may not support these. Check:
+
+[source,bash]
+----
+ethtool -k eth0 | grep -E "(gro|lro)"
+----
+
+Skip if unsupported (transfers will still work).
+
+=== Changes don't persist after reboot
+
+Make permanent:
+
+[source,bash]
+----
+# Add to /etc/sysctl.d/99-laminar.conf
+net.ipv4.tcp_congestion_control = bbr
+----
+
+Re-mount RAM disk on boot:
+
+[source,bash]
+----
+# Add to /etc/fstab
+tmpfs /mnt/laminar_tier1 tmpfs size=2G,mode=0700 0 0
+----
+
+== Log Analysis
+
+=== Enable verbose logging
+
+[source,bash]
+----
+podman exec laminar rclone copy src: dst: -v
+# Or very verbose
+podman exec laminar rclone copy src: dst: -vv
+----
+
+=== Common log messages
+
+[cols="2,3"]
+|===
+|Message |Meaning
+
+|`Copied (new)`
+|New file transferred
+
+|`Copied (replaced existing)`
+|Updated existing file
+
+|`Skipped`
+|File unchanged
+
+|`ERROR: directory not found`
+|Source path doesn't exist
+
+|`ERROR: token expired`
+|OAuth needs refresh
+
+|`429 Too Many Requests`
+|Rate limited by provider
+|===
+
+== Getting Help
+
+=== Gather diagnostics
+
+[source,bash]
+----
+# System info
+uname -a
+cat /etc/os-release
+
+# Laminar version
+just version
+
+# Container status
+podman ps -a
+
+# Configuration check
+just validate
+
+# Recent logs
+just logs 2>&1 | tail -100 > laminar-debug.log
+----
+
+=== Report an issue
+
+Include:
+
+1. Laminar version
+2. Operating system
+3. Steps to reproduce
+4. Expected vs actual behavior
+5. Relevant logs
+
+== Next Steps
+
+* link:deployment.adoc[Deployment Guide] - Production setup
+* link:networking.adoc[Network Tuning] - Optimize performance
+* link:../user-guide/configuration.adoc[Configuration] - Settings reference

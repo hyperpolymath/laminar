@@ -1,0 +1,330 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Getting Started with Laminar
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+This guide walks you through installing Laminar and running your first cloud-to-cloud transfer.
+
+== Prerequisites
+
+=== System Requirements
+
+[cols="1,2,2"]
+|===
+|Component |Minimum |Recommended
+
+|RAM
+|4 GB
+|8+ GB (for large transfers)
+
+|CPU
+|2 cores
+|4+ cores (for format conversion)
+
+|Network
+|10 Mbps
+|100+ Mbps
+
+|Storage
+|1 GB (for staging)
+|NVMe SSD recommended
+|===
+
+=== Required Software
+
+* **Linux**: Fedora 39+, Ubuntu 22.04+, or any modern distribution
+* **Podman** 4.0+ (or Docker)
+* **Just** command runner
+* **Rclone** 1.60+
+
+=== Optional Software
+
+* **Elixir** 1.15+ (for control plane)
+* **Erlang/OTP** 26+ (for control plane)
+
+== Installation
+
+=== Quick Install (Recommended)
+
+[source,bash]
+----
+# Clone the repository
+git clone https://github.com/hyperpolymath/laminar.git
+cd laminar
+
+# Run the installer (requires root for RAM disk setup)
+sudo ./scripts/install.osh
+----
+
+The installer will:
+
+1. Verify dependencies
+2. Create the RAM disk (Tier 1 cache)
+3. Create the NVMe staging directory (Tier 2)
+4. Generate environment configuration
+5. Apply network optimizations
+
+=== Manual Installation
+
+If you prefer to set things up manually:
+
+[source,bash]
+----
+# 1. Create cache directories
+sudo mkdir -p /mnt/laminar_tier1 /mnt/laminar_tier2
+
+# 2. Mount RAM disk (2GB)
+sudo mount -t tmpfs -o size=2G,mode=0700 tmpfs /mnt/laminar_tier1
+
+# 3. Create environment file
+cat > .env << 'EOF'
+export LAMINAR_TIER1=/mnt/laminar_tier1
+export LAMINAR_TIER2=/mnt/laminar_tier2
+export MIX_ENV=prod
+EOF
+
+# 4. Build the container
+just build-refinery
+----
+
+=== Verifying Installation
+
+[source,bash]
+----
+# Check all components
+just validate
+
+# Expected output:
+# :: rclone.conf: OK (or MISSING if not configured yet)
+# :: filters.txt: OK
+# :: .env: OK
+----
+
+== Configuring Cloud Remotes
+
+Before you can transfer files, you need to configure your cloud storage accounts.
+
+=== Interactive Setup
+
+[source,bash]
+----
+just setup-remotes
+----
+
+This launches Rclone's interactive configuration wizard.
+
+=== Example: Adding Dropbox
+
+[source]
+----
+$ just setup-remotes
+
+No remotes found - make a new one
+n) New remote
+q) Quit config
+
+n/q> n
+name> dropbox
+Type of storage to configure.
+...
+Storage> dropbox
+
+** See help for dropbox backend at: https://rclone.org/dropbox/ **
+
+Option client_id.
+...
+client_id>                    # Press Enter for default
+client_secret>                # Press Enter for default
+Edit advanced config?
+y/n> n
+
+Use auto config?
+y/n> y
+
+# Browser will open for OAuth authentication
+# After authorizing, you'll see:
+
+Remote config
+--------------------
+[dropbox]
+token = {"access_token":"..."}
+--------------------
+y) Yes this is OK
+e) Edit this remote
+d) Delete this remote
+y/e/d> y
+----
+
+=== Example: Adding Google Drive
+
+[source]
+----
+name> gdrive
+Storage> drive
+client_id>                    # Press Enter for default
+client_secret>                # Press Enter for default
+scope> drive                  # Full access
+root_folder_id>               # Press Enter for root
+service_account_file>         # Press Enter unless using service account
+Edit advanced config?
+y/n> n
+Use auto config?
+y/n> y
+
+# Browser opens for OAuth
+----
+
+=== Listing Configured Remotes
+
+[source,bash]
+----
+just remotes
+
+# Output:
+# dropbox:
+# gdrive:
+----
+
+== Your First Transfer
+
+=== Simple Transfer
+
+Transfer all files from Dropbox to Google Drive:
+
+[source,bash]
+----
+just stream dropbox: gdrive:
+----
+
+=== Transfer a Specific Folder
+
+[source,bash]
+----
+just stream dropbox:Photos gdrive:Backup/Photos
+----
+
+=== Smart Transfer (with Filtering)
+
+Automatically exclude `node_modules`, build artifacts, and OS junk:
+
+[source,bash]
+----
+just smart-stream dropbox:Projects gdrive:Projects
+----
+
+=== Monitoring Progress
+
+The transfer shows real-time progress:
+
+[source]
+----
+Transferred:        1.234 GiB / 5.678 GiB, 22%, 45.6 MiB/s, ETA 1m42s
+Transferred:           42 / 156, 27%
+Elapsed time:        1m23.4s
+----
+
+== Understanding the Output
+
+=== Transfer Statistics
+
+[cols="1,3"]
+|===
+|Field |Meaning
+
+|Transferred (bytes)
+|Amount of data moved so far / total
+
+|Transferred (files)
+|Number of files completed / total
+
+|Elapsed time
+|How long the transfer has been running
+
+|ETA
+|Estimated time remaining
+
+|Speed
+|Current transfer rate
+|===
+
+=== Exit Codes
+
+[cols="1,3"]
+|===
+|Code |Meaning
+
+|0
+|Success - all files transferred
+
+|1
+|Syntax error or invalid arguments
+
+|2
+|Error not otherwise categorized
+
+|3
+|Directory not found
+
+|4
+|File not found
+
+|5
+|Temporary error (retry may succeed)
+
+|6
+|Less serious errors (some transfers failed)
+
+|7
+|Fatal error
+
+|8
+|Transfer exceeded --max-transfer limit
+|===
+
+== Next Steps
+
+* link:configuration.adoc[Configuration] - Customize Laminar's behavior
+* link:transfers.adoc[Transfer Operations] - Advanced transfer options
+* link:filters.adoc[Filter Syntax] - Include/exclude specific files
+* link:../operations/troubleshooting.adoc[Troubleshooting] - If something goes wrong
+
+== Common First-Time Issues
+
+=== "No remotes found"
+
+You haven't configured any cloud storage yet:
+
+[source,bash]
+----
+just setup-remotes
+----
+
+=== "Permission denied" on RAM disk
+
+Run the installer with sudo:
+
+[source,bash]
+----
+sudo ./scripts/install.osh
+----
+
+=== OAuth authentication fails
+
+1. Ensure your browser can reach the OAuth callback URL
+2. Try running `rclone config` directly to debug
+3. Check firewall isn't blocking localhost
+
+=== Slow transfer speeds
+
+Run network tuning:
+
+[source,bash]
+----
+just tune-network
+----
+
+See link:../operations/networking.adoc[Network Tuning] for details.

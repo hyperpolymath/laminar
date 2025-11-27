@@ -1,0 +1,436 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Transfer Operations Guide
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+This guide covers all transfer operations available in Laminar.
+
+== Transfer Methods
+
+Laminar offers multiple ways to initiate transfers:
+
+[cols="1,2,1"]
+|===
+|Method |Use Case |Skill Level
+
+|CLI (just)
+|Quick transfers, scripting
+|Beginner
+
+|GraphQL API
+|Programmatic control, integrations
+|Intermediate
+
+|REST API
+|Simple HTTP integrations
+|Intermediate
+
+|Web UI (GraphiQL)
+|Interactive exploration
+|Beginner
+|===
+
+== CLI Transfers
+
+=== Basic Transfer
+
+Copy files from source to destination:
+
+[source,bash]
+----
+just stream <source> <destination>
+
+# Examples:
+just stream dropbox: gdrive:
+just stream dropbox:Photos gdrive:Backup/Photos
+just stream s3:bucket/path b2:bucket/path
+----
+
+=== Smart Transfer
+
+Apply intelligent filtering (excludes node_modules, build artifacts, OS junk):
+
+[source,bash]
+----
+just smart-stream <source> <destination>
+
+# Example:
+just smart-stream dropbox:Projects gdrive:Projects
+----
+
+=== Sync Transfer
+
+Mirror source to destination (deletes files in destination not in source):
+
+[source,bash]
+----
+just sync <source> <destination>
+
+# WARNING: This deletes files! Use with caution.
+just sync dropbox:Master gdrive:Mirror
+----
+
+=== BitTorrent-Logic Transfer
+
+Maximum parallelism for large file collections:
+
+[source,bash]
+----
+just torrent-stream <source> <destination>
+
+# Best for: Many large files, high-bandwidth connections
+just torrent-stream gdrive:Videos b2:archive
+----
+
+== Transfer Options
+
+=== Parallelism Control
+
+Adjust concurrent transfers based on your network:
+
+[source,bash]
+----
+# Via GraphQL mutation
+mutation {
+  startLaminarStream(
+    source: "dropbox:/"
+    destination: "gdrive:/"
+    parallelism: 64           # More concurrent file transfers
+    swarmStreams: 16          # More streams per large file
+    bufferSize: "256M"        # Larger buffer for high latency
+  ) {
+    id
+    status
+  }
+}
+----
+
+=== Bandwidth Limiting
+
+Prevent Laminar from saturating your connection:
+
+[source,bash]
+----
+# Limit to 10 MB/s
+podman exec laminar rclone rc core/bwlimit rate=10M
+----
+
+=== Dry Run
+
+Preview what would be transferred:
+
+[source,bash]
+----
+podman exec laminar rclone copy dropbox:Source gdrive:Dest --dry-run
+----
+
+== Transfer Modes
+
+=== Copy Mode (Default)
+
+Copies files without modifying source:
+
+* Source files are read
+* Destination files are created/updated
+* Source remains unchanged
+* Safe for all scenarios
+
+=== Sync Mode
+
+Mirrors source to destination:
+
+* Files in source are copied to destination
+* Files in destination NOT in source are **deleted**
+* Use with extreme caution
+* Best for backup mirrors
+
+=== Move Mode
+
+Transfers and deletes source:
+
+[source,bash]
+----
+# Not directly exposed in just - use rclone directly
+podman exec laminar rclone move dropbox:Temp gdrive:Archive
+----
+
+* Files are copied then deleted from source
+* Use for migration scenarios
+* Verify transfer before source deletion
+
+== Monitoring Transfers
+
+=== Real-Time Status
+
+[source,bash]
+----
+# Quick status
+just status
+
+# Continuous monitoring
+just logs
+----
+
+=== GraphQL Subscriptions
+
+Subscribe to transfer progress:
+
+[source,graphql]
+----
+subscription {
+  streamProgress(jobId: "123") {
+    id
+    status
+    speed
+    percentage
+    transferred
+    eta
+  }
+}
+----
+
+=== Active Jobs
+
+List all running transfers:
+
+[source,bash]
+----
+just jobs
+----
+
+== Controlling Transfers
+
+=== Pause Transfer
+
+[source,bash]
+----
+# Via RC API
+podman exec laminar rclone rc core/bwlimit rate=0
+----
+
+=== Resume Transfer
+
+[source,bash]
+----
+podman exec laminar rclone rc core/bwlimit rate=off
+----
+
+=== Stop Transfer
+
+[source,bash]
+----
+# Stop specific job
+just stop-job <job_id>
+
+# Stop all transfers
+just down
+----
+
+=== Abort via GraphQL
+
+[source,graphql]
+----
+mutation {
+  abortStream(jobId: "123")
+}
+----
+
+== Transfer Strategies
+
+=== Strategy: Full Backup
+
+Complete backup of a cloud account:
+
+[source,bash]
+----
+# 1. Start with dry run
+podman exec laminar rclone copy dropbox: gdrive:Backup/Dropbox --dry-run
+
+# 2. Run actual backup
+just smart-stream dropbox: gdrive:Backup/Dropbox
+----
+
+=== Strategy: Incremental Sync
+
+Daily synchronization:
+
+[source,bash]
+----
+# Only copy new/changed files (rclone's default behavior)
+just stream dropbox:Work gdrive:Work
+----
+
+=== Strategy: Archive Migration
+
+Move old files to cold storage:
+
+[source,bash]
+----
+# Create ghost links for massive archives
+# Files >5GB become URL stubs automatically
+
+just smart-stream dropbox:OldProjects b2:cold-archive
+----
+
+=== Strategy: Multi-Cloud Distribution
+
+Copy to multiple destinations:
+
+[source,bash]
+----
+# Run in parallel (use & for background)
+just stream dropbox:Critical gdrive:Backup &
+just stream dropbox:Critical b2:backup &
+just stream dropbox:Critical s3:backup &
+wait
+----
+
+== Transfer Performance
+
+=== Factors Affecting Speed
+
+[cols="1,3,2"]
+|===
+|Factor |Impact |Optimization
+
+|Network bandwidth
+|Primary limit
+|Use high-speed connection
+
+|Cloud API limits
+|Rate limiting
+|Use `--tpslimit`
+
+|File sizes
+|Small files = more overhead
+|Use `--fast-list`
+
+|File count
+|More files = more API calls
+|Increase `--checkers`
+
+|Geographic distance
+|Latency
+|Place relay near source
+|===
+
+=== Performance Profiles
+
+==== High-Bandwidth Connection
+
+[source,bash]
+----
+# Maximize throughput
+podman exec laminar rclone copy dropbox: gdrive: \
+  --transfers 64 \
+  --checkers 128 \
+  --multi-thread-streams 16 \
+  --buffer-size 256M
+----
+
+==== Low-Bandwidth Connection
+
+[source,bash]
+----
+# Reduce concurrent operations
+podman exec laminar rclone copy dropbox: gdrive: \
+  --transfers 4 \
+  --checkers 8 \
+  --bwlimit 5M
+----
+
+==== High-Latency Connection
+
+[source,bash]
+----
+# Increase buffers
+podman exec laminar rclone copy dropbox: gdrive: \
+  --transfers 16 \
+  --buffer-size 512M \
+  --timeout 5m
+----
+
+== Resumable Transfers
+
+=== Automatic Resume
+
+Laminar automatically tracks transfer state. If interrupted:
+
+[source,bash]
+----
+# Just run the same command again
+just stream dropbox:Large gdrive:Large
+
+# Rclone will skip already-transferred files
+----
+
+=== Checkpoint System
+
+The Tier 2 (NVMe) cache stores processed files for resume:
+
+* If network fails during upload, compressed/converted files remain
+* Re-run resumes from Tier 2 checkpoint
+* No re-download or re-processing needed
+
+== Verification
+
+=== Checksum Verification
+
+Enable checksums for critical transfers:
+
+[source,bash]
+----
+podman exec laminar rclone copy dropbox: gdrive: --checksum
+----
+
+=== Post-Transfer Check
+
+Verify destination matches source:
+
+[source,bash]
+----
+podman exec laminar rclone check dropbox: gdrive: --one-way
+----
+
+== Common Transfer Scenarios
+
+=== Scenario: Photo Library Migration
+
+[source,bash]
+----
+# 1. Check total size
+podman exec laminar rclone size dropbox:Photos
+
+# 2. Smart transfer (skips duplicates, temp files)
+just smart-stream dropbox:Photos gdrive:Photos
+
+# 3. Verify
+podman exec laminar rclone check dropbox:Photos gdrive:Photos --one-way
+----
+
+=== Scenario: Code Repository Backup
+
+[source,bash]
+----
+# Excludes node_modules, _build, target, etc.
+just smart-stream gdrive:Projects s3:code-backup
+----
+
+=== Scenario: Video Archive to Cold Storage
+
+[source,bash]
+----
+# Large videos become ghost links (URLs only)
+# Small files transfer normally
+just smart-stream dropbox:Videos b2:video-archive
+----
+
+== Next Steps
+
+* link:filters.adoc[Filter Syntax] - Fine-grained control over transfers
+* link:ghost-links.adoc[Ghost Links] - Handle massive files efficiently
+* link:../operations/troubleshooting.adoc[Troubleshooting] - When things go wrong

@@ -1,0 +1,568 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= GraphQL API Reference
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+Complete reference for Laminar's GraphQL API.
+
+== Endpoint
+
+[source]
+----
+POST /api/graphql
+GET  /api/graphiql  (Interactive playground)
+----
+
+== Authentication
+
+Development mode has no authentication. For production:
+
+[source,bash]
+----
+curl -X POST http://localhost:4000/api/graphql \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "..."}'
+----
+
+== Schema Overview
+
+[source,graphql]
+----
+type Query {
+  activeStreams: [TransferJob!]!
+  stream(id: ID!): TransferJob
+  systemHealth: SystemStats
+  remotes: [CloudRemote!]!
+}
+
+type Mutation {
+  startLaminarStream(
+    source: String!
+    destination: String!
+    parallelism: Int
+    swarmStreams: Int
+    bufferSize: String
+    filterMode: FilterMode
+  ): TransferJob
+
+  abortStream(jobId: ID!): Boolean
+  pauseStream(jobId: ID!): TransferJob
+  resumeStream(jobId: ID!): TransferJob
+}
+
+type Subscription {
+  streamProgress(jobId: ID!): TransferJob
+  allTransfers: TransferJob
+}
+----
+
+== Types
+
+=== TransferJob
+
+Represents a transfer operation.
+
+[source,graphql]
+----
+type TransferJob {
+  id: ID!
+  source: String!
+  destination: String!
+  status: JobStatus!
+  speed: String
+  percentage: Float
+  transferred: String
+  eta: String
+  config: StreamConfig
+}
+----
+
+[cols="1,1,3"]
+|===
+|Field |Type |Description
+
+|`id`
+|ID!
+|Unique job identifier
+
+|`source`
+|String!
+|Source remote and path (e.g., "dropbox:/Photos")
+
+|`destination`
+|String!
+|Destination remote and path
+
+|`status`
+|JobStatus!
+|Current job status
+
+|`speed`
+|String
+|Current transfer speed (e.g., "45.2 MiB/s")
+
+|`percentage`
+|Float
+|Completion percentage (0.0 to 100.0)
+
+|`transferred`
+|String
+|Amount transferred (e.g., "1.5 GiB")
+
+|`eta`
+|String
+|Estimated time remaining
+
+|`config`
+|StreamConfig
+|Configuration used for this job
+|===
+
+=== JobStatus
+
+[source,graphql]
+----
+enum JobStatus {
+  QUEUED      # Job is waiting to start
+  STREAMING   # Data is actively flowing
+  FINISHING   # Final cleanup in progress
+  FAILED      # Job failed with error
+  SUCCESS     # Job completed successfully
+}
+----
+
+=== StreamConfig
+
+[source,graphql]
+----
+type StreamConfig {
+  parallelism: Int
+  swarmStreams: Int
+  bufferSize: String
+  chunkSize: String
+}
+----
+
+=== SystemStats
+
+[source,graphql]
+----
+type SystemStats {
+  cpuLoad: Float
+  memoryUsed: String
+  memoryAvailable: String
+  networkCongestionAlgo: String
+  tcpRetransmits: Int
+  relayHealthy: Boolean
+}
+----
+
+=== CloudRemote
+
+[source,graphql]
+----
+type CloudRemote {
+  name: String!
+  type: String!
+  spaceUsed: String
+  spaceAvailable: String
+}
+----
+
+=== FilterMode
+
+[source,graphql]
+----
+enum FilterMode {
+  NONE        # Transfer everything
+  SMART       # Exclude OS junk only
+  CODE_CLEAN  # Exclude OS junk AND build artifacts
+}
+----
+
+== Queries
+
+=== activeStreams
+
+List all running transfers.
+
+[source,graphql]
+----
+query {
+  activeStreams {
+    id
+    source
+    destination
+    status
+    speed
+    percentage
+    transferred
+    eta
+  }
+}
+----
+
+Response:
+[source,json]
+----
+{
+  "data": {
+    "activeStreams": [
+      {
+        "id": "123",
+        "source": "dropbox:/Photos",
+        "destination": "gdrive:/Backup/Photos",
+        "status": "STREAMING",
+        "speed": "45.2 MiB/s",
+        "percentage": 67.5,
+        "transferred": "3.2 GiB",
+        "eta": "2m 15s"
+      }
+    ]
+  }
+}
+----
+
+=== stream
+
+Get a specific transfer by ID.
+
+[source,graphql]
+----
+query GetStream($id: ID!) {
+  stream(id: $id) {
+    id
+    source
+    destination
+    status
+    speed
+    percentage
+    config {
+      parallelism
+      swarmStreams
+      bufferSize
+    }
+  }
+}
+----
+
+Variables:
+[source,json]
+----
+{
+  "id": "123"
+}
+----
+
+=== systemHealth
+
+Get system health metrics.
+
+[source,graphql]
+----
+query {
+  systemHealth {
+    cpuLoad
+    memoryUsed
+    memoryAvailable
+    networkCongestionAlgo
+    tcpRetransmits
+    relayHealthy
+  }
+}
+----
+
+Response:
+[source,json]
+----
+{
+  "data": {
+    "systemHealth": {
+      "cpuLoad": 2.45,
+      "memoryUsed": "3.2 GiB",
+      "memoryAvailable": "12.8 GiB",
+      "networkCongestionAlgo": "bbr",
+      "tcpRetransmits": 42,
+      "relayHealthy": true
+    }
+  }
+}
+----
+
+=== remotes
+
+List configured cloud remotes.
+
+[source,graphql]
+----
+query {
+  remotes {
+    name
+    type
+  }
+}
+----
+
+Response:
+[source,json]
+----
+{
+  "data": {
+    "remotes": [
+      {"name": "dropbox:", "type": "dropbox"},
+      {"name": "gdrive:", "type": "drive"},
+      {"name": "s3:", "type": "s3"}
+    ]
+  }
+}
+----
+
+== Mutations
+
+=== startLaminarStream
+
+Start a new transfer.
+
+[source,graphql]
+----
+mutation StartTransfer(
+  $source: String!
+  $destination: String!
+  $parallelism: Int
+  $swarmStreams: Int
+  $bufferSize: String
+  $filterMode: FilterMode
+) {
+  startLaminarStream(
+    source: $source
+    destination: $destination
+    parallelism: $parallelism
+    swarmStreams: $swarmStreams
+    bufferSize: $bufferSize
+    filterMode: $filterMode
+  ) {
+    id
+    status
+    config {
+      parallelism
+      swarmStreams
+      bufferSize
+    }
+  }
+}
+----
+
+Variables:
+[source,json]
+----
+{
+  "source": "dropbox:/Photos",
+  "destination": "gdrive:/Backup/Photos",
+  "parallelism": 32,
+  "swarmStreams": 8,
+  "bufferSize": "128M",
+  "filterMode": "CODE_CLEAN"
+}
+----
+
+[cols="1,1,1,3"]
+|===
+|Argument |Type |Default |Description
+
+|`source`
+|String!
+|Required
+|Source remote:path
+
+|`destination`
+|String!
+|Required
+|Destination remote:path
+
+|`parallelism`
+|Int
+|32
+|Concurrent file transfers
+
+|`swarmStreams`
+|Int
+|8
+|Streams per large file
+
+|`bufferSize`
+|String
+|"128M"
+|Per-transfer buffer
+
+|`filterMode`
+|FilterMode
+|CODE_CLEAN
+|Filter strictness
+|===
+
+=== abortStream
+
+Stop a running transfer.
+
+[source,graphql]
+----
+mutation {
+  abortStream(jobId: "123")
+}
+----
+
+Returns `true` on success.
+
+=== pauseStream
+
+Pause a running transfer (sets bandwidth to 0).
+
+[source,graphql]
+----
+mutation {
+  pauseStream(jobId: "123") {
+    id
+    status
+  }
+}
+----
+
+=== resumeStream
+
+Resume a paused transfer.
+
+[source,graphql]
+----
+mutation {
+  resumeStream(jobId: "123") {
+    id
+    status
+    speed
+  }
+}
+----
+
+== Subscriptions
+
+=== streamProgress
+
+Subscribe to progress updates for a specific transfer.
+
+[source,graphql]
+----
+subscription WatchTransfer($jobId: ID!) {
+  streamProgress(jobId: $jobId) {
+    id
+    status
+    speed
+    percentage
+    transferred
+    eta
+  }
+}
+----
+
+Variables:
+[source,json]
+----
+{
+  "jobId": "123"
+}
+----
+
+Updates are pushed whenever transfer status changes.
+
+=== allTransfers
+
+Subscribe to all transfer events.
+
+[source,graphql]
+----
+subscription {
+  allTransfers {
+    id
+    source
+    destination
+    status
+  }
+}
+----
+
+Receives events for all transfers (started, completed, failed).
+
+== Error Handling
+
+Errors follow GraphQL spec:
+
+[source,json]
+----
+{
+  "data": null,
+  "errors": [
+    {
+      "message": "Failed to ignite Laminar flow: Connection refused",
+      "locations": [{"line": 2, "column": 3}],
+      "path": ["startLaminarStream"]
+    }
+  ]
+}
+----
+
+=== Common Errors
+
+[cols="2,3"]
+|===
+|Error |Cause
+
+|"Connection refused"
+|Rclone relay not running
+
+|"Remote not found"
+|Invalid remote name
+
+|"Permission denied"
+|Cloud API authentication failed
+
+|"Rate limited"
+|Too many API requests
+|===
+
+== WebSocket Protocol
+
+For subscriptions, connect via WebSocket:
+
+[source]
+----
+ws://localhost:4000/socket/websocket
+----
+
+Use the `absinthe-socket` or `@absinthe/socket` client libraries.
+
+== Rate Limits
+
+Laminar enforces these default limits:
+
+[cols="1,2"]
+|===
+|Operation |Limit
+
+|Queries
+|100/minute
+
+|Mutations
+|20/minute
+
+|Subscriptions
+|10 concurrent
+|===
+
+== Next Steps
+
+* link:rest.adoc[REST API] - HTTP fallback endpoints
+* link:cli.adoc[CLI Reference] - Command-line interface
+* link:../user-guide/web-ui.adoc[Web Interface] - Using GraphiQL

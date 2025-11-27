@@ -1,0 +1,455 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Filter Syntax Guide
+:toc: left
+:toclevels: 3
+:icons: font
+:source-highlighter: rouge
+
+Laminar uses Rclone's powerful filter syntax to control which files are transferred.
+
+== Filter Basics
+
+=== Include vs Exclude
+
+[cols="1,3"]
+|===
+|Prefix |Meaning
+
+|`+`
+|Include - transfer this file
+
+|`-`
+|Exclude - skip this file
+|===
+
+=== Filter Evaluation Order
+
+Filters are evaluated **in order**, first match wins:
+
+[source,text]
+----
+- *.tmp          # 1. Exclude .tmp files
++ important.tmp  # 2. This NEVER matches (*.tmp already excluded!)
+----
+
+Correct order:
+
+[source,text]
+----
++ important.tmp  # 1. Include important.tmp
+- *.tmp          # 2. Exclude other .tmp files
+----
+
+== Pattern Syntax
+
+=== Wildcards
+
+[cols="1,2,2"]
+|===
+|Pattern |Matches |Example
+
+|`*`
+|Any characters except `/`
+|`*.jpg` matches `photo.jpg`
+
+|`**`
+|Any characters including `/`
+|`**/node_modules` matches `src/app/node_modules`
+
+|`?`
+|Any single character
+|`file?.txt` matches `file1.txt`
+
+|`[abc]`
+|Any character in set
+|`file[123].txt` matches `file1.txt`, `file2.txt`
+
+|`[a-z]`
+|Any character in range
+|`[A-Z]*.doc` matches `Report.doc`
+|===
+
+=== Path Matching
+
+[cols="1,2,2"]
+|===
+|Pattern |Matches |Example
+
+|`/pattern`
+|Anchored to root
+|`/src` matches `src/` but not `app/src/`
+
+|`pattern/`
+|Directories only
+|`logs/` matches `logs/` directory
+
+|`pattern`
+|Anywhere in path
+|`*.log` matches `logs/app.log`
+|===
+
+== Built-in Filter Modes
+
+=== None Mode
+
+Transfer everything:
+
+[source,bash]
+----
+# No filtering applied
+just stream dropbox: gdrive:
+----
+
+=== Smart Mode
+
+Excludes OS junk only:
+
+[source,text]
+----
+# containers/rclone/filters-smart.txt
+- .DS_Store
+- .AppleDouble
+- Thumbs.db
+- Desktop.ini
+- *.tmp
+- *.temp
+- *.bak
+- *.swp
+- *~
+----
+
+=== Code Clean Mode
+
+Excludes OS junk AND build artifacts:
+
+[source,text]
+----
+# containers/rclone/filters.txt
+- .DS_Store
+- Thumbs.db
+- node_modules/
+- _build/
+- target/
+- deps/
+- vendor/
+- __pycache__/
+- .cache/
+- .git/
+- .idea/
+- .vscode/
+----
+
+== Custom Filters
+
+=== Creating a Filter File
+
+Create `my-filters.txt`:
+
+[source,text]
+----
+# My Custom Filters
+# Comments start with #
+
+# Include only images
++ *.jpg
++ *.jpeg
++ *.png
++ *.gif
++ *.webp
+
+# Exclude everything else
+- *
+----
+
+=== Using Custom Filters
+
+[source,bash]
+----
+podman exec laminar rclone copy dropbox:Photos gdrive:Photos \
+  --filter-from /config/rclone/my-filters.txt
+----
+
+== Common Filter Recipes
+
+=== Images Only
+
+[source,text]
+----
+# images-only.txt
++ *.jpg
++ *.jpeg
++ *.png
++ *.gif
++ *.webp
++ *.bmp
++ *.tiff
++ *.tif
++ *.heic
++ *.raw
++ *.cr2
++ *.nef
+- *
+----
+
+=== Documents Only
+
+[source,text]
+----
+# documents-only.txt
++ *.pdf
++ *.doc
++ *.docx
++ *.xls
++ *.xlsx
++ *.ppt
++ *.pptx
++ *.odt
++ *.ods
++ *.odp
++ *.txt
++ *.md
++ *.adoc
+- *
+----
+
+=== Exclude Large Files
+
+[source,text]
+----
+# small-files-only.txt
+- **/*.iso
+- **/*.dmg
+- **/*.zip{,.*}
+- **/*.tar{,.gz,.bz2,.xz}
+# Exclude files over 100MB
+--max-size 100M
+----
+
+=== Development Project
+
+[source,text]
+----
+# dev-project.txt
+# Exclude all build outputs
+- node_modules/**
+- _build/**
+- target/**
+- dist/**
+- build/**
+- .next/**
+- .nuxt/**
+- __pycache__/**
+- *.pyc
+- .pytest_cache/**
+
+# Exclude IDE files
+- .idea/**
+- .vscode/**
+- *.sublime-*
+
+# Exclude environment files (might contain secrets)
+- .env
+- .env.*
+- *.local
+
+# Exclude logs
+- *.log
+- logs/**
+
+# Include everything else
++ **
+----
+
+=== Photo Archive (No Raw)
+
+[source,text]
+----
+# photos-no-raw.txt
+# Exclude RAW files (keep originals in source)
+- *.raw
+- *.cr2
+- *.cr3
+- *.nef
+- *.arw
+- *.dng
+- *.orf
+- *.rw2
+
+# Include processed images
++ *.jpg
++ *.jpeg
++ *.png
++ *.heic
++ *.webp
+
+# Include videos
++ *.mp4
++ *.mov
++ *.m4v
+
+# Exclude everything else
+- *
+----
+
+== Size and Time Filters
+
+=== Size Filters
+
+[source,bash]
+----
+# Only files smaller than 100MB
+--max-size 100M
+
+# Only files larger than 1MB
+--min-size 1M
+
+# Between 1MB and 100MB
+--min-size 1M --max-size 100M
+----
+
+=== Age Filters
+
+[source,bash]
+----
+# Files modified in last 7 days
+--max-age 7d
+
+# Files older than 1 year
+--min-age 1y
+
+# Files modified between dates
+--max-age 2024-01-01 --min-age 2023-01-01
+----
+
+=== Combined Example
+
+[source,bash]
+----
+# Recent photos under 50MB
+podman exec laminar rclone copy dropbox:Photos gdrive:RecentPhotos \
+  --include "*.jpg" \
+  --include "*.png" \
+  --max-size 50M \
+  --max-age 30d
+----
+
+== Filter Flags
+
+=== Command Line Filters
+
+[source,bash]
+----
+# Single include
+--include "*.jpg"
+
+# Single exclude
+--exclude "node_modules/"
+
+# Multiple patterns
+--include "*.jpg" --include "*.png" --exclude "*.tmp"
+
+# Filter file
+--filter-from /path/to/filters.txt
+
+# Include file (shorthand for + rules only)
+--include-from /path/to/includes.txt
+
+# Exclude file (shorthand for - rules only)
+--exclude-from /path/to/excludes.txt
+----
+
+=== Filter File Directives
+
+[source,text]
+----
+# Include from another file
+include another-filter.txt
+
+# Exclude from another file
+exclude more-excludes.txt
+
+# Clear all previous rules
+!
+
+# Merge with another filter file
+merge /path/to/more-rules.txt
+----
+
+== Debugging Filters
+
+=== Test with Dry Run
+
+[source,bash]
+----
+podman exec laminar rclone copy dropbox: gdrive: \
+  --filter-from /config/rclone/my-filters.txt \
+  --dry-run \
+  -v
+----
+
+=== Show Matched Files
+
+[source,bash]
+----
+podman exec laminar rclone ls dropbox: \
+  --filter-from /config/rclone/my-filters.txt
+----
+
+=== Explain Filter Matching
+
+[source,bash]
+----
+# List files showing which filter matched
+podman exec laminar rclone lsf dropbox:Projects \
+  --filter-from /config/rclone/filters.txt \
+  --log-level DEBUG 2>&1 | grep -E "(include|exclude)"
+----
+
+== Filter Precedence
+
+When multiple filter sources are used, they combine in this order:
+
+1. `--include`/`--exclude` flags
+2. `--filter` flags
+3. `--filter-from` file contents
+4. `--include-from`/`--exclude-from` file contents
+
+All rules are combined into a single list, evaluated in order.
+
+== Intelligence Engine Override
+
+Laminar's Intelligence engine applies additional filtering on top of Rclone:
+
+[cols="1,2,2"]
+|===
+|Type |Intelligence Decision |Rclone Filter
+
+|node_modules/
+|`:ignore`
+|Also in filters.txt
+
+|5GB+ files
+|`{:link, :source_location}`
+|Transferred as ghost links
+
+|.wav files
+|`{:convert, :flac}`
+|Converted, not raw transfer
+|===
+
+To bypass Intelligence and use only Rclone filters:
+
+[source,bash]
+----
+# Direct rclone command (bypasses Intelligence)
+podman exec laminar rclone copy dropbox: gdrive: \
+  --filter-from /config/rclone/my-filters.txt
+----
+
+== Next Steps
+
+* link:ghost-links.adoc[Ghost Links] - Handle massive files
+* link:transfers.adoc[Transfer Operations] - Apply filters to transfers
+* link:../developer-guide/intelligence.adoc[Intelligence Engine] - Understand automatic decisions
