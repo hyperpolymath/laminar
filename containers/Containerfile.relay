@@ -1,38 +1,176 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2025 Laminar Contributors
 #
-# Laminar Relay Container (Minimal)
-# Contains only Rclone for basic streaming transfers.
+# Laminar Relay Container
+# High-velocity cloud-to-cloud streaming relay with Rclone
+#
+# Build variants:
+#   podman build -f Containerfile.relay -t laminar-relay .
+#   podman build -f Containerfile.relay --target minimal -t laminar-relay:minimal .
+#   podman build -f Containerfile.relay --target full -t laminar-relay:full .
+#
+# Security: Non-root, read-only rootfs capable, no shell in minimal
 
-FROM cgr.dev/chainguard/wolfi-base:latest
+# =============================================================================
+# STAGE 1: Base Builder
+# =============================================================================
+FROM cgr.dev/chainguard/wolfi-base:latest AS builder
+
+# Install build tools
+RUN apk add --no-cache \
+    curl \
+    ca-certificates \
+    busybox
+
+# Download and verify rclone (for specific version control)
+ARG RCLONE_VERSION=1.68.2
+RUN curl -sSL "https://downloads.rclone.org/v${RCLONE_VERSION}/rclone-v${RCLONE_VERSION}-linux-amd64.zip" -o /tmp/rclone.zip && \
+    unzip -q /tmp/rclone.zip -d /tmp && \
+    chmod +x /tmp/rclone-v${RCLONE_VERSION}-linux-amd64/rclone && \
+    mv /tmp/rclone-v${RCLONE_VERSION}-linux-amd64/rclone /usr/local/bin/rclone
+
+# =============================================================================
+# STAGE 2: Minimal Runtime (Distroless-like)
+# =============================================================================
+FROM cgr.dev/chainguard/static:latest AS minimal
+
+LABEL org.opencontainers.image.title="Laminar Relay (Minimal)"
+LABEL org.opencontainers.image.description="High-velocity cloud streaming relay - minimal variant"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.source="https://github.com/laminar-dev/laminar"
+LABEL org.opencontainers.image.vendor="Laminar Project"
+
+# Copy rclone binary
+COPY --from=builder /usr/local/bin/rclone /usr/bin/rclone
+
+# Copy CA certificates
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Create directories (as root before switching)
+USER root
+RUN mkdir -p /config/rclone /cache/ram /cache/nvme /tmp && \
+    chown -R 65532:65532 /config /cache /tmp
+
+# Copy filter configurations
+COPY rclone/filters.txt /config/rclone/filters.txt
+
+# Expose RC API port
+EXPOSE 5572
+
+# Run as non-root (Chainguard nonroot user)
+USER 65532:65532
+
+# Set environment
+ENV RCLONE_CONFIG=/config/rclone/rclone.conf
+ENV RCLONE_CACHE_DIR=/cache
+ENV RCLONE_TEMP_DIR=/tmp
+
+ENTRYPOINT ["/usr/bin/rclone"]
+CMD ["rcd", "--rc-addr", ":5572", "--rc-no-auth"]
+
+# =============================================================================
+# STAGE 3: Standard Runtime
+# =============================================================================
+FROM cgr.dev/chainguard/wolfi-base:latest AS standard
 
 LABEL org.opencontainers.image.title="Laminar Relay"
 LABEL org.opencontainers.image.description="High-velocity cloud streaming relay"
 LABEL org.opencontainers.image.version="1.0.0"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.source="https://github.com/laminar-dev/laminar"
+LABEL org.opencontainers.image.vendor="Laminar Project"
 
-# Install Rclone
+# Install runtime dependencies
 RUN apk add --no-cache \
     rclone \
     curl \
-    ca-certificates
+    ca-certificates \
+    tini \
+    && rm -rf /var/cache/apk/*
 
 # Setup directories
-RUN mkdir -p /config/rclone /cache/ram /cache/nvme
+RUN mkdir -p /config/rclone /cache/ram /cache/nvme /var/log/laminar && \
+    chown -R nonroot:nonroot /config /cache /var/log/laminar
 
-# Copy filter configuration
-COPY rclone/filters.txt /config/rclone/filters.txt
+# Copy filter configurations
+COPY --chown=nonroot:nonroot rclone/filters.txt /config/rclone/filters.txt
+COPY --chown=nonroot:nonroot rclone/filters-smart.txt /config/rclone/filters-smart.txt
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-    CMD curl -sf http://localhost:5572/ || exit 1
+# Healthcheck with detailed status
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -sf http://localhost:5572/core/stats || exit 1
 
-# Expose RC API port
+# Expose ports
 EXPOSE 5572
 
-# Run as non-root (Chainguard default)
+# Run as non-root
 USER nonroot
 
-# Entrypoint
-ENTRYPOINT ["rclone"]
+# Set environment
+ENV RCLONE_CONFIG=/config/rclone/rclone.conf
+ENV RCLONE_CACHE_DIR=/cache
+ENV RCLONE_TEMP_DIR=/tmp
+ENV RCLONE_LOG_FILE=/var/log/laminar/rclone.log
+ENV RCLONE_LOG_LEVEL=INFO
+
+# Use tini for proper signal handling
+ENTRYPOINT ["/sbin/tini", "--", "rclone"]
 CMD ["rcd", "--rc-web-gui", "--rc-addr", ":5572", "--rc-no-auth"]
+
+# =============================================================================
+# STAGE 4: Full Runtime (with extras)
+# =============================================================================
+FROM cgr.dev/chainguard/wolfi-base:latest AS full
+
+LABEL org.opencontainers.image.title="Laminar Relay (Full)"
+LABEL org.opencontainers.image.description="High-velocity cloud streaming relay - full variant"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.source="https://github.com/laminar-dev/laminar"
+LABEL org.opencontainers.image.vendor="Laminar Project"
+
+# Install full runtime dependencies
+RUN apk add --no-cache \
+    rclone \
+    curl \
+    wget \
+    ca-certificates \
+    tini \
+    jq \
+    openssh-client \
+    fuse3 \
+    tzdata \
+    && rm -rf /var/cache/apk/*
+
+# Setup directories
+RUN mkdir -p /config/rclone /cache/ram /cache/nvme /mnt/remote /var/log/laminar && \
+    chown -R nonroot:nonroot /config /cache /mnt /var/log/laminar
+
+# Copy filter configurations
+COPY --chown=nonroot:nonroot rclone/filters.txt /config/rclone/filters.txt
+COPY --chown=nonroot:nonroot rclone/filters-smart.txt /config/rclone/filters-smart.txt
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -sf http://localhost:5572/core/stats || exit 1
+
+# Expose ports
+EXPOSE 5572
+
+# Run as non-root
+USER nonroot
+
+# Set environment
+ENV RCLONE_CONFIG=/config/rclone/rclone.conf
+ENV RCLONE_CACHE_DIR=/cache
+ENV RCLONE_TEMP_DIR=/tmp
+ENV RCLONE_LOG_FILE=/var/log/laminar/rclone.log
+ENV RCLONE_LOG_LEVEL=INFO
+ENV TZ=UTC
+
+ENTRYPOINT ["/sbin/tini", "--", "rclone"]
+CMD ["rcd", "--rc-web-gui", "--rc-addr", ":5572", "--rc-no-auth"]
+
+# Default target
+FROM standard

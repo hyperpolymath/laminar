@@ -1,0 +1,297 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2025 Laminar Contributors
+#
+# Laminar Container Orchestration
+# Use with: podman-compose up -d
+#
+# Profiles:
+#   default    - relay + control-plane
+#   full       - relay + refinery + control-plane
+#   minimal    - relay only (distroless)
+#   dev        - development stack with hot reload
+#
+# Usage:
+#   podman-compose up -d                    # Start default stack
+#   podman-compose --profile full up -d     # Start full stack
+#   podman-compose --profile dev up -d      # Start development stack
+
+name: laminar
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  laminar:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  # Persistent configuration
+  config:
+    driver: local
+
+  # Tiered cache storage
+  cache-ram:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=4g,mode=1777
+
+  cache-nvme:
+    driver: local
+
+  # Logs
+  logs:
+    driver: local
+
+# =============================================================================
+# SERVICES
+# =============================================================================
+services:
+
+  # ---------------------------------------------------------------------------
+  # RELAY - Core Rclone streaming service
+  # ---------------------------------------------------------------------------
+  relay:
+    build:
+      context: .
+      dockerfile: Containerfile.relay
+      target: standard
+    image: laminar-relay:latest
+    container_name: laminar-relay
+    hostname: relay
+    restart: unless-stopped
+    networks:
+      laminar:
+        ipv4_address: 172.28.0.10
+    ports:
+      - "5572:5572"  # Rclone RC API
+    volumes:
+      - config:/config/rclone:ro
+      - cache-ram:/cache/ram
+      - cache-nvme:/cache/nvme
+      - logs:/var/log/laminar
+    environment:
+      - RCLONE_CONFIG=/config/rclone/rclone.conf
+      - RCLONE_CACHE_DIR=/cache
+      - RCLONE_LOG_FILE=/var/log/laminar/rclone.log
+      - RCLONE_LOG_LEVEL=INFO
+      - RCLONE_TRANSFERS=32
+      - RCLONE_CHECKERS=64
+      - RCLONE_BUFFER_SIZE=128M
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5572/core/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 1G
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=1G,mode=1777
+
+  # ---------------------------------------------------------------------------
+  # REFINERY - Format conversion service
+  # ---------------------------------------------------------------------------
+  refinery:
+    build:
+      context: .
+      dockerfile: Containerfile.refinery
+      target: media
+    image: laminar-refinery:latest
+    container_name: laminar-refinery
+    hostname: refinery
+    restart: unless-stopped
+    profiles:
+      - full
+    networks:
+      laminar:
+        ipv4_address: 172.28.0.11
+    ports:
+      - "5573:5572"  # Separate port for refinery
+    volumes:
+      - config:/config/rclone:ro
+      - cache-ram:/cache/ram
+      - cache-nvme:/cache/nvme
+      - logs:/var/log/laminar
+    environment:
+      - RCLONE_CONFIG=/config/rclone/rclone.conf
+      - RCLONE_CACHE_DIR=/cache
+      - RCLONE_LOG_FILE=/var/log/laminar/refinery.log
+      - RCLONE_LOG_LEVEL=INFO
+      - MAGICK_MEMORY_LIMIT=512MiB
+      - FFMPEG_THREADS=0
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5572/core/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "4"
+    security_opt:
+      - no-new-privileges:true
+
+  # ---------------------------------------------------------------------------
+  # CONTROL-PLANE - Elixir/Phoenix GraphQL API
+  # ---------------------------------------------------------------------------
+  control-plane:
+    build:
+      context: ..
+      dockerfile: containers/Containerfile.control-plane
+      target: release
+    image: laminar-control-plane:latest
+    container_name: laminar-control-plane
+    hostname: control-plane
+    restart: unless-stopped
+    depends_on:
+      relay:
+        condition: service_healthy
+    networks:
+      laminar:
+        ipv4_address: 172.28.0.20
+    ports:
+      - "4000:4000"  # HTTP/GraphQL
+      - "4001:4001"  # WebSocket subscriptions
+      - "9568:9568"  # Prometheus metrics
+    environment:
+      - MIX_ENV=prod
+      - PHX_SERVER=true
+      - PHX_HOST=localhost
+      - PORT=4000
+      - SECRET_KEY_BASE=${SECRET_KEY_BASE:-changeme}
+      - RCLONE_URL=http://relay:5572
+      - RELEASE_COOKIE=${RELEASE_COOKIE:-laminar_secret}
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    security_opt:
+      - no-new-privileges:true
+
+  # ---------------------------------------------------------------------------
+  # RELAY-MINIMAL - Distroless variant
+  # ---------------------------------------------------------------------------
+  relay-minimal:
+    build:
+      context: .
+      dockerfile: Containerfile.distroless
+    image: laminar:distroless
+    container_name: laminar-relay-minimal
+    hostname: relay-minimal
+    restart: unless-stopped
+    profiles:
+      - minimal
+    networks:
+      laminar:
+        ipv4_address: 172.28.0.12
+    ports:
+      - "5572:5572"
+    volumes:
+      - config:/config/rclone:ro
+      - cache-nvme:/cache
+    environment:
+      - RCLONE_CONFIG=/config/rclone/rclone.conf
+      - RCLONE_CACHE_DIR=/cache
+      - RCLONE_LOG_LEVEL=INFO
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+
+  # ---------------------------------------------------------------------------
+  # DEV - Development environment
+  # ---------------------------------------------------------------------------
+  dev:
+    build:
+      context: ..
+      dockerfile: containers/Containerfile.control-plane
+      target: dev
+    image: laminar-dev:latest
+    container_name: laminar-dev
+    hostname: dev
+    profiles:
+      - dev
+    networks:
+      laminar:
+        ipv4_address: 172.28.0.100
+    ports:
+      - "4000:4000"
+      - "4001:4001"
+    volumes:
+      - ..:/app:Z
+      - config:/config/rclone:ro
+    environment:
+      - MIX_ENV=dev
+      - PHX_SERVER=true
+      - RCLONE_URL=http://relay:5572
+    command: ["mix", "phx.server"]
+    stdin_open: true
+    tty: true
+
+  # ---------------------------------------------------------------------------
+  # PROMETHEUS - Metrics collection (optional)
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: cgr.dev/chainguard/prometheus:latest
+    container_name: laminar-prometheus
+    hostname: prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    networks:
+      laminar:
+        ipv4_address: 172.28.0.30
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+
+  # ---------------------------------------------------------------------------
+  # GRAFANA - Visualization (optional)
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: cgr.dev/chainguard/grafana:latest
+    container_name: laminar-grafana
+    hostname: grafana
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    depends_on:
+      - prometheus
+    networks:
+      laminar:
+        ipv4_address: 172.28.0.31
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false

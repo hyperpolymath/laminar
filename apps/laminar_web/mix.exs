@@ -18,7 +18,32 @@ defmodule LaminarWeb.MixProject do
       deps: deps(),
       description: "High-velocity cloud streaming relay with GraphQL control plane",
       package: package(),
-      docs: docs()
+      docs: docs(),
+      escript: escript(),
+      releases: releases()
+    ]
+  end
+
+  defp escript do
+    [
+      main_module: Laminar.CLI,
+      name: "laminar",
+      comment: "Cloud-to-cloud streaming relay"
+    ]
+  end
+
+  defp releases do
+    [
+      laminar_web: [
+        include_executables_for: [:unix],
+        applications: [runtime_tools: :permanent],
+        steps: [:assemble, :tar]
+      ],
+      laminar_cli: [
+        include_executables_for: [:unix],
+        applications: [runtime_tools: :permanent],
+        cookie: "laminar_secret"
+      ]
     ]
   end
 

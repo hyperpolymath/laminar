@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2025 Laminar Contributors
+#
+# Laminar Distroless Container
+# Ultra-minimal container with no shell, package manager, or unnecessary tools
+#
+# Build:
+#   podman build -f Containerfile.distroless -t laminar:distroless .
+#
+# Security benefits:
+#   - No shell (sh, bash)
+#   - No package manager (apk, apt)
+#   - No debugging tools
+#   - Minimal attack surface
+#   - Read-only filesystem friendly
+#
+# Based on Chainguard static image (glibc variant for rclone)
+
+# =============================================================================
+# STAGE 1: Builder - Download and prepare rclone
+# =============================================================================
+FROM cgr.dev/chainguard/wolfi-base:latest AS builder
+
+# Install build tools
+RUN apk add --no-cache \
+    curl \
+    unzip \
+    ca-certificates
+
+# Download specific rclone version
+ARG RCLONE_VERSION=1.68.2
+ARG TARGETARCH=amd64
+
+RUN curl -sSL "https://downloads.rclone.org/v${RCLONE_VERSION}/rclone-v${RCLONE_VERSION}-linux-${TARGETARCH}.zip" \
+    -o /tmp/rclone.zip && \
+    unzip -q /tmp/rclone.zip -d /tmp && \
+    mv /tmp/rclone-v${RCLONE_VERSION}-linux-${TARGETARCH}/rclone /usr/local/bin/rclone && \
+    chmod +x /usr/local/bin/rclone && \
+    rm -rf /tmp/*
+
+# Verify rclone works
+RUN /usr/local/bin/rclone version
+
+# Create filter files
+RUN mkdir -p /config/rclone
+
+COPY rclone/filters.txt /config/rclone/filters.txt
+COPY rclone/filters-smart.txt /config/rclone/filters-smart.txt
+
+# =============================================================================
+# STAGE 2: Distroless Runtime
+# =============================================================================
+FROM cgr.dev/chainguard/glibc-dynamic:latest AS runtime
+
+LABEL org.opencontainers.image.title="Laminar (Distroless)"
+LABEL org.opencontainers.image.description="Ultra-minimal cloud streaming relay"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.source="https://github.com/laminar-dev/laminar"
+LABEL org.opencontainers.image.vendor="Laminar Project"
+
+# Copy rclone binary
+COPY --from=builder /usr/local/bin/rclone /usr/bin/rclone
+
+# Copy CA certificates for HTTPS
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+
+# Copy filter configurations
+COPY --from=builder /config/rclone /config/rclone
+
+# Create required directories
+# Note: In distroless, we use root for setup then switch
+USER root
+WORKDIR /
+
+# Expose RC API port
+EXPOSE 5572
+
+# Set environment
+ENV RCLONE_CONFIG=/config/rclone/rclone.conf
+ENV RCLONE_CACHE_DIR=/cache
+ENV RCLONE_TEMP_DIR=/tmp
+ENV RCLONE_LOG_LEVEL=INFO
+
+# Run as nonroot (Chainguard standard UID)
+USER 65532:65532
+
+# No shell, so use exec form only
+ENTRYPOINT ["/usr/bin/rclone"]
+CMD ["rcd", "--rc-addr", ":5572", "--rc-no-auth"]
+
+# =============================================================================
+# STAGE 3: Static Runtime (Even more minimal)
+# =============================================================================
+FROM cgr.dev/chainguard/static:latest AS static
+
+LABEL org.opencontainers.image.title="Laminar (Static)"
+LABEL org.opencontainers.image.description="Static cloud streaming relay (requires static rclone build)"
+LABEL org.opencontainers.image.version="1.0.0"
+
+# Note: This requires a statically compiled rclone binary
+# Standard rclone is dynamically linked and needs glibc
+# This stage is a placeholder for future static builds
+
+# For now, use the glibc-dynamic stage above
+# COPY --from=builder /usr/local/bin/rclone-static /usr/bin/rclone
+
+EXPOSE 5572
+USER 65532:65532
+ENTRYPOINT ["/usr/bin/rclone"]
+CMD ["rcd", "--rc-addr", ":5572", "--rc-no-auth"]
+
+# Default to glibc-dynamic runtime
+FROM runtime

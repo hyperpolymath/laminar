@@ -1,0 +1,191 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2025 Laminar Contributors
+#
+# Laminar Control Plane Container
+# Elixir/Phoenix GraphQL API server
+#
+# Build variants:
+#   podman build -f Containerfile.control-plane -t laminar-control-plane .
+#   podman build -f Containerfile.control-plane --target release -t laminar-control-plane:release .
+#   podman build -f Containerfile.control-plane --target dev -t laminar-control-plane:dev .
+#
+# Multi-stage build for minimal production image
+
+ARG ELIXIR_VERSION=1.16.0
+ARG OTP_VERSION=26
+ARG DEBIAN_VERSION=bookworm-20231218-slim
+
+# =============================================================================
+# STAGE 1: Build Stage
+# =============================================================================
+FROM cgr.dev/chainguard/wolfi-base:latest AS builder
+
+# Install build dependencies
+RUN apk add --no-cache \
+    elixir \
+    erlang \
+    erlang-dev \
+    git \
+    build-base \
+    npm \
+    nodejs \
+    && rm -rf /var/cache/apk/*
+
+# Set build environment
+ENV MIX_ENV=prod
+ENV HEX_HOME=/root/.hex
+ENV MIX_HOME=/root/.mix
+
+# Install Hex and Rebar
+RUN mix local.hex --force && \
+    mix local.rebar --force
+
+# Set working directory
+WORKDIR /app
+
+# Copy mix files first (for caching)
+COPY apps/laminar/mix.exs apps/laminar/
+COPY apps/laminar_web/mix.exs apps/laminar_web/
+COPY mix.exs mix.lock ./
+COPY config config
+
+# Install dependencies
+RUN mix deps.get --only prod && \
+    mix deps.compile
+
+# Copy application source
+COPY apps apps
+COPY rel rel
+
+# Build release
+RUN mix compile && \
+    mix release laminar_web
+
+# =============================================================================
+# STAGE 2: Minimal Release Runtime
+# =============================================================================
+FROM cgr.dev/chainguard/wolfi-base:latest AS release
+
+LABEL org.opencontainers.image.title="Laminar Control Plane"
+LABEL org.opencontainers.image.description="Laminar GraphQL API and orchestration layer"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.source="https://github.com/laminar-dev/laminar"
+LABEL org.opencontainers.image.vendor="Laminar Project"
+
+# Install minimal runtime dependencies
+RUN apk add --no-cache \
+    erlang \
+    openssl \
+    ncurses \
+    libstdc++ \
+    tini \
+    curl \
+    ca-certificates \
+    && rm -rf /var/cache/apk/*
+
+# Create app user
+RUN addgroup -g 1000 laminar && \
+    adduser -u 1000 -G laminar -D -h /app laminar
+
+# Set working directory
+WORKDIR /app
+
+# Copy release from builder
+COPY --from=builder --chown=laminar:laminar /app/_build/prod/rel/laminar_web ./
+
+# Create necessary directories
+RUN mkdir -p /app/tmp /app/logs && \
+    chown -R laminar:laminar /app
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -sf http://localhost:4000/health || exit 1
+
+# Expose ports
+# 4000 - HTTP/GraphQL
+# 4001 - WebSocket subscriptions
+# 9568 - Prometheus metrics
+EXPOSE 4000 4001 9568
+
+# Run as non-root
+USER laminar
+
+# Set environment
+ENV HOME=/app
+ENV MIX_ENV=prod
+ENV PHX_SERVER=true
+ENV PHX_HOST=localhost
+ENV PORT=4000
+ENV SECRET_KEY_BASE=changeme
+ENV RCLONE_URL=http://relay:5572
+ENV RELEASE_COOKIE=laminar_secret
+
+# Use tini for signal handling
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["/app/bin/laminar_web", "start"]
+
+# =============================================================================
+# STAGE 3: Development Runtime
+# =============================================================================
+FROM cgr.dev/chainguard/wolfi-base:latest AS dev
+
+LABEL org.opencontainers.image.title="Laminar Control Plane (Dev)"
+LABEL org.opencontainers.image.description="Laminar development environment"
+LABEL org.opencontainers.image.version="1.0.0-dev"
+
+# Install full development dependencies
+RUN apk add --no-cache \
+    elixir \
+    erlang \
+    erlang-dev \
+    git \
+    build-base \
+    npm \
+    nodejs \
+    curl \
+    inotify-tools \
+    postgresql-client \
+    && rm -rf /var/cache/apk/*
+
+# Set development environment
+ENV MIX_ENV=dev
+ENV HEX_HOME=/root/.hex
+ENV MIX_HOME=/root/.mix
+
+# Install Hex and Rebar
+RUN mix local.hex --force && \
+    mix local.rebar --force
+
+# Set working directory
+WORKDIR /app
+
+# Expose ports
+EXPOSE 4000 4001 9568
+
+# Default command for development
+CMD ["mix", "phx.server"]
+
+# =============================================================================
+# STAGE 4: Distroless Runtime (Experimental)
+# =============================================================================
+FROM cgr.dev/chainguard/static:latest AS distroless
+
+LABEL org.opencontainers.image.title="Laminar Control Plane (Distroless)"
+LABEL org.opencontainers.image.description="Laminar minimal distroless image"
+LABEL org.opencontainers.image.version="1.0.0"
+
+# Note: Erlang/BEAM requires glibc and various libraries
+# This is a placeholder for future distroless BEAM support
+# Currently not fully supported due to BEAM runtime requirements
+
+# Copy from builder (would need static BEAM build)
+# COPY --from=builder /app/_build/prod/rel/laminar_web /app
+
+# Expose ports
+EXPOSE 4000 4001 9568
+
+USER 65532:65532
+
+# Default target
+FROM release

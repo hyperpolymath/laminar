@@ -1,42 +1,200 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2025 Laminar Contributors
 #
-# Laminar Refinery Container (Full)
-# Contains Rclone + FFmpeg + ImageMagick for format conversion.
+# Laminar Refinery Container
+# Full-featured relay with format conversion capabilities
+#
+# Build variants:
+#   podman build -f Containerfile.refinery -t laminar-refinery .
+#   podman build -f Containerfile.refinery --target media -t laminar-refinery:media .
+#   podman build -f Containerfile.refinery --target full -t laminar-refinery:full .
+#
+# Includes: Rclone + FFmpeg + ImageMagick + Zstd + libvips
 
-FROM cgr.dev/chainguard/wolfi-base:latest
+# =============================================================================
+# STAGE 1: Base with rclone version pinning
+# =============================================================================
+FROM cgr.dev/chainguard/wolfi-base:latest AS base
 
-LABEL org.opencontainers.image.title="Laminar Refinery"
-LABEL org.opencontainers.image.description="High-velocity cloud streaming relay with format conversion"
-LABEL org.opencontainers.image.version="1.0.0"
-LABEL org.opencontainers.image.licenses="Apache-2.0"
-
-# Install tools
+# Install common dependencies
 RUN apk add --no-cache \
     rclone \
-    ffmpeg \
-    imagemagick \
-    zstd \
     curl \
-    ca-certificates
+    ca-certificates \
+    tini \
+    && rm -rf /var/cache/apk/*
+
+# =============================================================================
+# STAGE 2: Standard Refinery (Image conversion only)
+# =============================================================================
+FROM base AS standard
+
+LABEL org.opencontainers.image.title="Laminar Refinery"
+LABEL org.opencontainers.image.description="Cloud streaming relay with format conversion"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.source="https://github.com/laminar-dev/laminar"
+LABEL org.opencontainers.image.vendor="Laminar Project"
+
+# Install image processing tools
+RUN apk add --no-cache \
+    imagemagick \
+    libwebp-tools \
+    zstd \
+    && rm -rf /var/cache/apk/*
 
 # Setup directories
-RUN mkdir -p /config/rclone /cache/ram /cache/nvme
+RUN mkdir -p /config/rclone /cache/ram /cache/nvme /var/log/laminar /tmp/refinery && \
+    chown -R nonroot:nonroot /config /cache /var/log/laminar /tmp/refinery
 
-# Copy configurations
-COPY rclone/filters.txt /config/rclone/filters.txt
-COPY rclone/filters-smart.txt /config/rclone/filters-smart.txt
+# Copy filter configurations
+COPY --chown=nonroot:nonroot rclone/filters.txt /config/rclone/filters.txt
+COPY --chown=nonroot:nonroot rclone/filters-smart.txt /config/rclone/filters-smart.txt
 
 # Healthcheck
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-    CMD curl -sf http://localhost:5572/ || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -sf http://localhost:5572/core/stats || exit 1
 
-# Expose RC API port
+# Expose ports
 EXPOSE 5572
 
 # Run as non-root
 USER nonroot
 
-# Entrypoint
-ENTRYPOINT ["rclone"]
+# Set environment
+ENV RCLONE_CONFIG=/config/rclone/rclone.conf
+ENV RCLONE_CACHE_DIR=/cache
+ENV RCLONE_TEMP_DIR=/tmp
+ENV RCLONE_LOG_FILE=/var/log/laminar/rclone.log
+ENV RCLONE_LOG_LEVEL=INFO
+ENV MAGICK_TEMPORARY_PATH=/tmp/refinery
+ENV MAGICK_MEMORY_LIMIT=512MiB
+ENV MAGICK_MAP_LIMIT=1GiB
+
+ENTRYPOINT ["/sbin/tini", "--", "rclone"]
 CMD ["rcd", "--rc-web-gui", "--rc-addr", ":5572", "--rc-no-auth"]
+
+# =============================================================================
+# STAGE 3: Media Refinery (Image + Audio/Video conversion)
+# =============================================================================
+FROM base AS media
+
+LABEL org.opencontainers.image.title="Laminar Refinery (Media)"
+LABEL org.opencontainers.image.description="Cloud streaming relay with full media conversion"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.source="https://github.com/laminar-dev/laminar"
+LABEL org.opencontainers.image.vendor="Laminar Project"
+
+# Install media processing tools
+RUN apk add --no-cache \
+    ffmpeg \
+    imagemagick \
+    libwebp-tools \
+    flac \
+    lame \
+    opus-tools \
+    vorbis-tools \
+    zstd \
+    && rm -rf /var/cache/apk/*
+
+# Setup directories
+RUN mkdir -p /config/rclone /cache/ram /cache/nvme /var/log/laminar /tmp/refinery && \
+    chown -R nonroot:nonroot /config /cache /var/log/laminar /tmp/refinery
+
+# Copy filter configurations
+COPY --chown=nonroot:nonroot rclone/filters.txt /config/rclone/filters.txt
+COPY --chown=nonroot:nonroot rclone/filters-smart.txt /config/rclone/filters-smart.txt
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -sf http://localhost:5572/core/stats || exit 1
+
+# Expose ports
+EXPOSE 5572
+
+# Run as non-root
+USER nonroot
+
+# Set environment
+ENV RCLONE_CONFIG=/config/rclone/rclone.conf
+ENV RCLONE_CACHE_DIR=/cache
+ENV RCLONE_TEMP_DIR=/tmp
+ENV RCLONE_LOG_FILE=/var/log/laminar/rclone.log
+ENV RCLONE_LOG_LEVEL=INFO
+ENV MAGICK_TEMPORARY_PATH=/tmp/refinery
+ENV MAGICK_MEMORY_LIMIT=512MiB
+ENV MAGICK_MAP_LIMIT=1GiB
+ENV FFMPEG_THREADS=0
+
+ENTRYPOINT ["/sbin/tini", "--", "rclone"]
+CMD ["rcd", "--rc-web-gui", "--rc-addr", ":5572", "--rc-no-auth"]
+
+# =============================================================================
+# STAGE 4: Full Refinery (All conversion capabilities + extras)
+# =============================================================================
+FROM base AS full
+
+LABEL org.opencontainers.image.title="Laminar Refinery (Full)"
+LABEL org.opencontainers.image.description="Cloud streaming relay with all conversion capabilities"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.source="https://github.com/laminar-dev/laminar"
+LABEL org.opencontainers.image.vendor="Laminar Project"
+
+# Install all processing tools
+RUN apk add --no-cache \
+    ffmpeg \
+    imagemagick \
+    libwebp-tools \
+    flac \
+    lame \
+    opus-tools \
+    vorbis-tools \
+    zstd \
+    xz \
+    bzip2 \
+    gzip \
+    libarchive-tools \
+    jq \
+    openssh-client \
+    fuse3 \
+    tzdata \
+    exiftool \
+    && rm -rf /var/cache/apk/*
+
+# Setup directories
+RUN mkdir -p /config/rclone /cache/ram /cache/nvme /mnt/remote /var/log/laminar /tmp/refinery && \
+    chown -R nonroot:nonroot /config /cache /mnt /var/log/laminar /tmp/refinery
+
+# Copy filter configurations
+COPY --chown=nonroot:nonroot rclone/filters.txt /config/rclone/filters.txt
+COPY --chown=nonroot:nonroot rclone/filters-smart.txt /config/rclone/filters-smart.txt
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -sf http://localhost:5572/core/stats || exit 1
+
+# Expose ports
+EXPOSE 5572
+
+# Run as non-root
+USER nonroot
+
+# Set environment
+ENV RCLONE_CONFIG=/config/rclone/rclone.conf
+ENV RCLONE_CACHE_DIR=/cache
+ENV RCLONE_TEMP_DIR=/tmp
+ENV RCLONE_LOG_FILE=/var/log/laminar/rclone.log
+ENV RCLONE_LOG_LEVEL=INFO
+ENV MAGICK_TEMPORARY_PATH=/tmp/refinery
+ENV MAGICK_MEMORY_LIMIT=512MiB
+ENV MAGICK_MAP_LIMIT=1GiB
+ENV FFMPEG_THREADS=0
+ENV TZ=UTC
+
+ENTRYPOINT ["/sbin/tini", "--", "rclone"]
+CMD ["rcd", "--rc-web-gui", "--rc-addr", ":5572", "--rc-no-auth"]
+
+# Default target
+FROM media

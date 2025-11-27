@@ -1,0 +1,186 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2025 Laminar Contributors
+#
+# Rclone Configuration Example
+# Copy to config/rclone/rclone.conf and fill in your credentials
+#
+# SECURITY: This file contains sensitive credentials.
+# - Never commit to version control
+# - Use environment variables where possible
+# - Consider rclone config encryption: rclone config password
+#
+# To configure interactively: just setup-remotes
+# Or: rclone config
+
+# =============================================================================
+# DROPBOX
+# =============================================================================
+# OAuth flow: rclone config -> dropbox -> follow browser prompts
+[dropbox]
+type = dropbox
+# token = {"access_token":"...","token_type":"bearer","refresh_token":"...","expiry":"..."}
+
+# =============================================================================
+# GOOGLE DRIVE
+# =============================================================================
+# OAuth flow: rclone config -> drive -> follow browser prompts
+[gdrive]
+type = drive
+scope = drive
+# token = {"access_token":"...","token_type":"Bearer","refresh_token":"...","expiry":"..."}
+# root_folder_id =
+# team_drive =
+
+# Google Drive with Service Account (for automation)
+[gdrive-sa]
+type = drive
+scope = drive
+# service_account_file = /path/to/service-account.json
+
+# =============================================================================
+# AMAZON S3
+# =============================================================================
+[s3]
+type = s3
+provider = AWS
+# access_key_id = AKIAIOSFODNN7EXAMPLE
+# secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+region = us-east-1
+# endpoint =
+# acl = private
+
+# S3-Compatible (MinIO, Wasabi, DigitalOcean Spaces, etc.)
+[s3-compat]
+type = s3
+provider = Other
+# access_key_id = YOUR_ACCESS_KEY
+# secret_access_key = YOUR_SECRET_KEY
+# endpoint = https://s3.example.com
+# region =
+
+# =============================================================================
+# BACKBLAZE B2
+# =============================================================================
+[b2]
+type = b2
+# account = YOUR_ACCOUNT_ID
+# key = YOUR_APPLICATION_KEY
+# hard_delete = false
+
+# =============================================================================
+# MICROSOFT ONEDRIVE
+# =============================================================================
+[onedrive]
+type = onedrive
+# token = {"access_token":"...","token_type":"Bearer","refresh_token":"...","expiry":"..."}
+# drive_id =
+# drive_type = personal
+
+# OneDrive for Business / SharePoint
+[onedrive-business]
+type = onedrive
+# token = {"access_token":"...","token_type":"Bearer","refresh_token":"...","expiry":"..."}
+# drive_type = business
+
+# =============================================================================
+# AZURE BLOB STORAGE
+# =============================================================================
+[azure]
+type = azureblob
+# account = YOUR_STORAGE_ACCOUNT
+# key = YOUR_STORAGE_KEY
+# sas_url =
+# endpoint =
+
+# =============================================================================
+# GOOGLE CLOUD STORAGE
+# =============================================================================
+[gcs]
+type = google cloud storage
+# project_number = YOUR_PROJECT_NUMBER
+# service_account_file = /path/to/service-account.json
+# bucket_policy_only = false
+
+# =============================================================================
+# SFTP / SSH
+# =============================================================================
+[sftp]
+type = sftp
+# host = ssh.example.com
+# user = username
+# port = 22
+# key_file = ~/.ssh/id_rsa
+# key_file_pass =
+
+# =============================================================================
+# WEBDAV (Nextcloud, ownCloud, etc.)
+# =============================================================================
+[webdav]
+type = webdav
+# url = https://cloud.example.com/remote.php/dav/files/username/
+# vendor = nextcloud
+# user = username
+# pass = YOUR_PASSWORD_OBSCURED
+
+# =============================================================================
+# FTP
+# =============================================================================
+[ftp]
+type = ftp
+# host = ftp.example.com
+# user = username
+# pass = YOUR_PASSWORD_OBSCURED
+# port = 21
+# tls = false
+
+# =============================================================================
+# MEGA
+# =============================================================================
+[mega]
+type = mega
+# user = your@email.com
+# pass = YOUR_PASSWORD_OBSCURED
+
+# =============================================================================
+# BOX
+# =============================================================================
+[box]
+type = box
+# token = {"access_token":"...","token_type":"bearer","refresh_token":"...","expiry":"..."}
+
+# =============================================================================
+# PCLOUD
+# =============================================================================
+[pcloud]
+type = pcloud
+# token = {"access_token":"...","token_type":"bearer","expiry":"..."}
+# hostname = api.pcloud.com
+
+# =============================================================================
+# CRYPT (Encrypted Overlay)
+# =============================================================================
+# Wraps any remote with client-side encryption
+[crypt-gdrive]
+type = crypt
+remote = gdrive:Encrypted
+# password = YOUR_ENCRYPTION_PASSWORD_OBSCURED
+# password2 = YOUR_SALT_PASSWORD_OBSCURED
+filename_encryption = standard
+directory_name_encryption = true
+
+# =============================================================================
+# LOCAL FILESYSTEM
+# =============================================================================
+[local]
+type = local
+# nounc = true
+
+# =============================================================================
+# UNION (Combine Multiple Remotes)
+# =============================================================================
+[union]
+type = union
+# upstreams = gdrive:Backup s3:backup b2:backup
+# action_policy = all
+# create_policy = all
+# search_policy = all

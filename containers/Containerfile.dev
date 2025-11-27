@@ -1,0 +1,144 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2025 Laminar Contributors
+#
+# Laminar Development Container
+# Full development environment with all tools
+#
+# Build:
+#   podman build -f Containerfile.dev -t laminar-dev .
+#
+# Run interactively:
+#   podman run -it --rm -v $(pwd):/app:Z laminar-dev
+#
+# Features:
+#   - Elixir + Erlang (full OTP)
+#   - Node.js + npm
+#   - Rclone
+#   - FFmpeg + ImageMagick
+#   - Development tools (git, curl, jq)
+#   - Hot reload support (inotify)
+
+FROM cgr.dev/chainguard/wolfi-base:latest
+
+LABEL org.opencontainers.image.title="Laminar Development"
+LABEL org.opencontainers.image.description="Complete Laminar development environment"
+LABEL org.opencontainers.image.version="1.0.0-dev"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
+# =============================================================================
+# INSTALL DEVELOPMENT TOOLS
+# =============================================================================
+
+# Core development tools
+RUN apk add --no-cache \
+    # Elixir/Erlang
+    elixir \
+    erlang \
+    erlang-dev \
+    # Node.js
+    nodejs \
+    npm \
+    # Rclone
+    rclone \
+    # Media tools
+    ffmpeg \
+    imagemagick \
+    libwebp-tools \
+    zstd \
+    # Build tools
+    build-base \
+    git \
+    # Networking tools
+    curl \
+    wget \
+    # Utilities
+    jq \
+    yq \
+    fzf \
+    ripgrep \
+    # File watching
+    inotify-tools \
+    # Database clients
+    postgresql-client \
+    sqlite \
+    # Shell
+    bash \
+    zsh \
+    # Editors (minimal)
+    vim \
+    nano \
+    # Documentation
+    mandoc \
+    && rm -rf /var/cache/apk/*
+
+# =============================================================================
+# ELIXIR SETUP
+# =============================================================================
+
+ENV MIX_ENV=dev
+ENV HEX_HOME=/root/.hex
+ENV MIX_HOME=/root/.mix
+
+# Install Hex and Rebar
+RUN mix local.hex --force && \
+    mix local.rebar --force
+
+# Install common Elixir tools
+RUN mix archive.install hex phx_new --force
+
+# =============================================================================
+# NICKEL SETUP (Configuration language)
+# =============================================================================
+
+# Install Nickel for configuration management
+ARG NICKEL_VERSION=1.5.0
+RUN curl -sSL "https://github.com/tweag/nickel/releases/download/${NICKEL_VERSION}/nickel-x86_64-linux" \
+    -o /usr/local/bin/nickel && \
+    chmod +x /usr/local/bin/nickel || echo "Nickel install optional"
+
+# =============================================================================
+# JUST SETUP (Command runner)
+# =============================================================================
+
+# Install just command runner
+ARG JUST_VERSION=1.26.0
+RUN curl -sSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+    | tar xz -C /usr/local/bin just || echo "Just install optional"
+
+# =============================================================================
+# WORKSPACE SETUP
+# =============================================================================
+
+WORKDIR /app
+
+# Create directories
+RUN mkdir -p \
+    /config/rclone \
+    /cache/ram \
+    /cache/nvme \
+    /var/log/laminar \
+    /tmp/refinery
+
+# =============================================================================
+# ENVIRONMENT
+# =============================================================================
+
+ENV RCLONE_CONFIG=/config/rclone/rclone.conf
+ENV RCLONE_CACHE_DIR=/cache
+ENV RCLONE_TEMP_DIR=/tmp
+ENV PHX_SERVER=true
+ENV ERL_AFLAGS="-kernel shell_history enabled"
+
+# Shell setup
+ENV SHELL=/bin/bash
+ENV TERM=xterm-256color
+
+# Expose ports
+# 4000 - Phoenix HTTP
+# 4001 - Phoenix WebSocket
+# 5572 - Rclone RC API
+# 9568 - Prometheus metrics
+EXPOSE 4000 4001 5572 9568
+
+# Default command
+CMD ["/bin/bash"]

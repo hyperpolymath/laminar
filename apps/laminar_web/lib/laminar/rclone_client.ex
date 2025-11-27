@@ -80,12 +80,139 @@ defmodule Laminar.RcloneClient do
 
   @doc """
   Upload a small file (for Ghost Link stubs).
+
+  Uses the operations/uploadfile endpoint which accepts multipart form data,
+  or falls back to writing a temp file and using copyfile.
   """
-  def put_file(remote, path, content) do
-    # For small files, we use rcat which reads from stdin
-    # In practice, we'd write to a temp file and use copyfile
-    Logger.warning("put_file not fully implemented - would upload to #{remote}:#{path}")
-    {:ok, :uploaded}
+  def put_file(remote, path, content) when is_binary(content) do
+    # Use rcat to pipe content directly to remote
+    # This works for small files like ghost link stubs
+    case rpc("operations/rcat", %{
+           fs: remote,
+           remote: path,
+           _content: Base.encode64(content)
+         }) do
+      {:ok, _} ->
+        Logger.info("Uploaded #{byte_size(content)} bytes to #{remote}:#{path}")
+        {:ok, path}
+
+      {:error, _reason} ->
+        # Fallback: write to temp file and copy
+        put_file_via_temp(remote, path, content)
+    end
+  end
+
+  defp put_file_via_temp(remote, path, content) do
+    temp_dir = System.get_env("LAMINAR_TIER1", "/tmp")
+    temp_file = Path.join(temp_dir, "laminar_upload_#{:erlang.unique_integer([:positive])}")
+
+    try do
+      File.write!(temp_file, content)
+
+      case rpc("operations/copyfile", %{
+             srcFs: "/",
+             srcRemote: temp_file,
+             dstFs: remote,
+             dstRemote: path
+           }) do
+        {:ok, _} ->
+          Logger.info("Uploaded #{byte_size(content)} bytes to #{remote}:#{path} via temp file")
+          {:ok, path}
+
+        {:error, reason} ->
+          Logger.error("Failed to upload to #{remote}:#{path}: #{inspect(reason)}")
+          {:error, reason}
+      end
+    after
+      File.rm(temp_file)
+    end
+  end
+
+  @doc """
+  Delete a file from a remote.
+  """
+  def delete_file(remote, path) do
+    case rpc("operations/deletefile", %{fs: remote, remote: path}) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Move a file within or between remotes.
+  """
+  def move_file(src_remote, src_path, dst_remote, dst_path) do
+    rpc("operations/movefile", %{
+      srcFs: src_remote,
+      srcRemote: src_path,
+      dstFs: dst_remote,
+      dstRemote: dst_path
+    })
+  end
+
+  @doc """
+  Copy a file within or between remotes.
+  """
+  def copy_file(src_remote, src_path, dst_remote, dst_path) do
+    rpc("operations/copyfile", %{
+      srcFs: src_remote,
+      srcRemote: src_path,
+      dstFs: dst_remote,
+      dstRemote: dst_path
+    })
+  end
+
+  @doc """
+  Get file info (size, modtime, hash).
+  """
+  def stat(remote, path) do
+    case rpc("operations/stat", %{fs: remote, remote: path}) do
+      {:ok, %{"item" => item}} -> {:ok, item}
+      {:ok, item} when is_map(item) -> {:ok, item}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Create a directory.
+  """
+  def mkdir(remote, path) do
+    rpc("operations/mkdir", %{fs: remote, remote: path})
+  end
+
+  @doc """
+  Get disk usage for a remote.
+  """
+  def about(remote) do
+    rpc("operations/about", %{fs: remote})
+  end
+
+  @doc """
+  Set bandwidth limit (e.g., "10M", "off").
+  """
+  def set_bwlimit(rate) do
+    rpc("core/bwlimit", %{rate: rate})
+  end
+
+  @doc """
+  Get transfer statistics.
+  """
+  def stats do
+    rpc("core/stats", %{})
+  end
+
+  @doc """
+  Get memory statistics.
+  """
+  def memstats do
+    rpc("core/memstats", %{})
+  end
+
+  @doc """
+  Trigger garbage collection.
+  """
+  def gc do
+    rpc("debug/set-gc-percent", %{gc_percent: 100})
   end
 
   @doc """
