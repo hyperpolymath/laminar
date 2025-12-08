@@ -1,529 +1,348 @@
-;; SPDX-License-Identifier: Apache-2.0
-;; SPDX-FileCopyrightText: 2025 Laminar Contributors
-;;
-;; STATE.scm - Laminar Project State
-;; Download at end of session | Upload at start of next conversation
-;; Format: https://github.com/hyperpolymath/state.scm
+;;; STATE.scm — Laminar Cloud-to-Cloud Streaming Relay
+;;; Checkpoint/Restore for AI-assisted development sessions
+;;; Format: Guile Scheme (minikanren-compatible)
+;;; Spec: https://github.com/hyperpolymath/state.scm
 
-(define state
-  '((metadata
-     (format-version . "2.0")
-     (schema-version . "2025-12-08")
-     (project . "laminar")
-     (project-version . "1.0.0")
-     (created-at . "2025-12-08T00:00:00Z")
-     (last-updated . "2025-12-08T00:00:00Z")
-     (generator . "Claude/STATE-system"))
+;;;============================================================================
+;;; METADATA
+;;;============================================================================
 
-    ;;=========================================================================
-    ;; CURRENT POSITION
-    ;;=========================================================================
-    ;; Laminar v1.0.0 is SHIPPED and production-ready.
-    ;; Core streaming relay, intelligence engine, 4-lane Broadway pipeline,
-    ;; GraphQL API, CLI, and containerized deployment are complete.
-    ;; Currently in enhancement phase targeting v1.1.
-    ;;=========================================================================
+(define state-version "1.0.0")
+(define state-created "2025-12-08T00:00:00Z")
+(define state-updated "2025-12-08T00:00:00Z")
+(define state-schema "hyperpolymath/state.scm@v1")
 
-    (focus
-     (current-project . "laminar")
-     (current-phase . "v1.1-development")
-     (milestone . "Enhanced Monitoring & Configuration")
-     (deadline . #f)
-     (blocking-projects . ()))
+;;;============================================================================
+;;; PROJECT IDENTITY
+;;;============================================================================
 
-    ;;=========================================================================
-    ;; PROJECT CATALOG
-    ;;=========================================================================
+(define project
+  '((name . "Laminar")
+    (tagline . "High-velocity cloud-to-cloud streaming relay")
+    (description . "Transfer data between cloud storage providers without downloading to local persistent storage. Data flows through RAM and ephemeral NVMe cache like laminar fluid flow - parallel layers streaming smoothly without disruption.")
+    (repository . "https://github.com/hyperpolymath/laminar")
+    (license . "Apache-2.0")
+    (version . "1.0.0")
+    (released . "2025-11-27")))
 
-    (projects
+;;;============================================================================
+;;; CURRENT POSITION
+;;;============================================================================
 
-     ;; === COMPLETED (v1.0.0) ===
+(define current-position
+  '((phase . "post-mvp-stabilization")
+    (milestone . "v1.0.0-released")
+    (completion-percent . 100)
+    (status . "production-ready")
 
-     ((name . "core-streaming-relay")
-      (status . "complete")
-      (completion . 100)
-      (category . "infrastructure")
-      (phase . "shipped")
-      (description . "Cloud-to-cloud streaming with 32 parallel transfers via Rclone")
-      (dependencies . ())
-      (blockers . ())
-      (next . ())
-      (notes . "Production-ready. Supports 40+ cloud providers."))
+    (achievements
+      ((core-relay . "complete")
+       (intelligence-engine . "complete")
+       (broadway-pipeline . "complete")
+       (graphql-api . "complete")
+       (cli-interface . "complete")
+       (container-infrastructure . "complete")
+       (documentation . "complete")
+       (test-coverage . "complete")
+       (ci-cd-pipelines . "complete")))
 
-     ((name . "intelligence-engine")
-      (status . "complete")
-      (completion . 100)
-      (category . "infrastructure")
-      (phase . "shipped")
-      (description . "Declarative pattern-matching rule engine for file routing")
-      (dependencies . ())
-      (blockers . ())
-      (next . ())
-      (notes . "9 rule categories: bullshit filter, ghost links, audio/image conversion, compression, media passthrough"))
+    (metrics
+      ((source-lines . 3391)
+       (test-lines . 1402)
+       (just-recipes . 143)
+       (cloud-providers-supported . 40)
+       (concurrent-transfers . 32)
+       (pipeline-lanes . 4)))))
 
-     ((name . "4-lane-broadway-pipeline")
-      (status . "complete")
-      (completion . 100)
-      (category . "infrastructure")
-      (phase . "shipped")
-      (description . "Parallel processing: Ghost(16), Express(32), Squeeze(8), Refinery(4)")
-      (dependencies . ("intelligence-engine"))
-      (blockers . ())
-      (next . ())
-      (notes . "Broadway with back-pressure. Express lane never idles."))
+;;;============================================================================
+;;; ARCHITECTURE SUMMARY
+;;;============================================================================
 
-     ((name . "graphql-api")
-      (status . "complete")
-      (completion . 100)
-      (category . "api")
-      (phase . "shipped")
-      (description . "Absinthe GraphQL with queries, mutations, subscriptions")
-      (dependencies . ())
-      (blockers . ())
-      (next . ())
-      (notes . "Playground at /api/graphiql. Real-time progress via subscriptions."))
+(define architecture
+  '((control-plane
+      ((language . "Elixir 1.15+")
+       (framework . "Phoenix 1.7.10")
+       (api . "Absinthe GraphQL")
+       (pipeline . "Broadway 4-lane")))
 
-     ((name . "refinery-format-conversion")
-      (status . "complete")
-      (completion . 100)
-      (category . "infrastructure")
-      (phase . "shipped")
-      (description . "In-RAM format conversion: WAV→FLAC, BMP→WebP, text→Zstd")
-      (dependencies . ())
-      (blockers . ())
-      (next . ())
-      (notes . "FFmpeg for audio, ImageMagick for images. All processing in Tier 1 RAM."))
+    (data-plane
+      ((engine . "Rclone")
+       (protocol . "RC API")
+       (transfers . 32)
+       (multi-thread-streams . 8)))
 
-     ((name . "ghost-links")
-      (status . "complete")
-      (completion . 100)
-      (category . "feature")
-      (phase . "shipped")
-      (description . "URL stub creation for files >5GB")
-      (dependencies . ())
-      (blockers . ())
-      (next . ())
-      (notes . "Zero bandwidth transfer for archival files."))
+    (storage-tiers
+      ((tier-1 . "RAM tmpfs 2GB volatile buffer")
+       (tier-2 . "NVMe checkpoint cache for resume")))
 
-     ((name . "containerized-deployment")
-      (status . "complete")
-      (completion . 100)
-      (category . "infrastructure")
-      (phase . "shipped")
-      (description . "Podman rootless containers with Chainguard Wolfi base")
-      (dependencies . ())
-      (blockers . ())
-      (next . ())
-      (notes . "compose.yaml with multiple profiles: default, full, minimal, dev"))
+    (pipeline-lanes
+      ((ghost . "URL stub creation, zero bandwidth")
+       (express . "Direct passthrough, 32 concurrent")
+       (squeeze . "Zstd compression, 8 concurrent")
+       (refinery . "Format conversion, 4 concurrent")))
 
-     ((name . "documentation")
-      (status . "complete")
-      (completion . 100)
-      (category . "documentation")
-      (phase . "shipped")
-      (description . "Wiki, README, CLAUDE.adoc, cookbook, API reference")
-      (dependencies . ())
-      (blockers . ())
-      (next . ())
-      (notes . "AsciiDoc format. Comprehensive coverage."))
+    (container
+      ((runtime . "Podman rootless")
+       (base-image . "Chainguard Wolfi")
+       (security . "non-root, read-only rootfs")))))
 
-     ((name . "test-suite")
-      (status . "complete")
-      (completion . 100)
-      (category . "quality")
-      (phase . "shipped")
-      (description . "Unit and integration tests for all core modules")
-      (dependencies . ())
-      (blockers . ())
-      (next . ())
-      (notes . "CI via GitHub Actions. Credo + Dialyxir for static analysis."))
+;;;============================================================================
+;;; ROUTE TO v1.1 (NEXT MVP ITERATION)
+;;;============================================================================
 
-     ;; === IN PROGRESS (v1.1) ===
+(define route-to-v1.1
+  '((goal . "Enhanced monitoring and transfer profiles")
+    (target-completion . "TBD - user to schedule")
+    (status . "planning")
 
-     ((name . "nickel-config-system")
-      (status . "in-progress")
-      (completion . 40)
-      (category . "infrastructure")
-      (phase . "implementation")
-      (description . "Type-safe configuration with Nickel schema and profiles")
-      (dependencies . ())
-      (blockers . ())
-      (next . ("Complete profile loading in CLI (cli.ex:905,911,1064)"
-               "Implement profile selection via API"
-               "Document profile creation"))
-      (notes . "Schema and default values exist. Profile loading not integrated."))
+    (milestones
+      ((m1-transfer-profiles
+         ((description . "Named configuration profiles for common transfer patterns")
+          (status . "not-started")
+          (tasks
+            ((define-profile-schema . "pending")
+             (cli-profile-selection . "pending")
+             (api-profile-selection . "pending")
+             (built-in-templates . "pending")
+             (profile-persistence . "pending")))))
 
-     ((name . "cli-command-completion")
-      (status . "in-progress")
-      (completion . 85)
-      (category . "feature")
-      (phase . "implementation")
-      (description . "Complete remaining CLI commands with TODOs")
-      (dependencies . ())
-      (blockers . ())
-      (next . ("Implement size calculation (cli.ex:757)"
-               "Implement check command (cli.ex:782)"
-               "Implement rmdir command (cli.ex:826)"
-               "Implement providers listing (cli.ex:867)"))
-      (notes . "1,427 line CLI. Most commands work. 7 TODOs remaining."))
+       (m2-prometheus-metrics
+         ((description . "Export pipeline metrics to Prometheus")
+          (status . "not-started")
+          (tasks
+            ((telemetry-integration . "pending")
+             (metrics-endpoint . "pending")
+             (grafana-dashboards . "pending")
+             (alerting-rules . "pending")))))
 
-     ;; === PLANNED (v1.1) ===
+       (m3-transfer-history
+         ((description . "Persist and query transfer history")
+          (status . "not-started")
+          (tasks
+            ((history-schema . "pending")
+             (sqlite-or-ets-storage . "pending")
+             (graphql-history-queries . "pending")
+             (cli-history-command . "pending")))))
 
-     ((name . "transfer-profiles")
-      (status . "pending")
-      (completion . 0)
-      (category . "feature")
-      (phase . "planning")
-      (description . "Named transfer profiles with preset configurations")
-      (dependencies . ("nickel-config-system"))
-      (blockers . ("nickel-config-system"))
-      (next . ("Define profile schema"
-               "Create templates for common scenarios"
-               "Wire profile selection to CLI/API"))
-      (notes . "Blocked on Nickel config completion."))
+       (m4-web-dashboard
+         ((description . "Real-time web UI for monitoring")
+          (status . "not-started")
+          (tasks
+            ((framework-selection . "pending")
+             (transfer-visualization . "pending")
+             (remote-browser . "pending")
+             (real-time-updates . "pending")))))))))
 
-     ((name . "prometheus-metrics")
-      (status . "pending")
-      (completion . 0)
-      (category . "observability")
-      (phase . "planning")
-      (description . "Prometheus metrics endpoint for monitoring")
-      (dependencies . ())
-      (blockers . ())
-      (next . ("Add telemetry_metrics_prometheus dependency"
-               "Expose /metrics endpoint"
-               "Define transfer metrics (bytes, duration, errors)"))
-      (notes . "Telemetry already integrated. Need Prometheus reporter."))
+;;;============================================================================
+;;; ISSUES & BLOCKERS
+;;;============================================================================
 
-     ((name . "grafana-dashboards")
-      (status . "pending")
-      (completion . 0)
-      (category . "observability")
-      (phase . "planning")
-      (description . "Pre-built Grafana dashboard templates")
-      (dependencies . ("prometheus-metrics"))
-      (blockers . ("prometheus-metrics"))
-      (next . ("Create transfer throughput dashboard"
-               "Create error rate dashboard"
-               "Add alerting rules"))
-      (notes . ""))
+(define issues
+  '((critical . ())
 
-     ((name . "transfer-history")
-      (status . "pending")
-      (completion . 0)
-      (category . "feature")
-      (phase . "planning")
-      (description . "Persistent transfer history and statistics")
-      (dependencies . ())
-      (blockers . ())
-      (next . ("Choose storage backend (SQLite vs ETS dump)"
-               "Design history schema"
-               "Add history query API"))
-      (notes . "Currently stateless - transfers exist only in RAM."))
+    (high-priority
+      ((issue-001
+         ((title . "RC API authentication not enforced by default")
+          (description . "Rclone RC API runs without authentication in dev mode. Must be configured for production.")
+          (type . "security-hardening")
+          (workaround . "Document in SECURITY.adoc, require explicit configuration")
+          (resolution . "Add authentication enforcement check on startup")))))
 
-     ((name . "web-dashboard")
-      (status . "pending")
-      (completion . 0)
-      (category . "ui")
-      (phase . "planning")
-      (description . "Web UI for transfer management and monitoring")
-      (dependencies . ("graphql-api"))
-      (blockers . ())
-      (next . ("Choose framework (React vs Svelte vs LiveView)"
-               "Design dashboard wireframes"
-               "Implement real-time transfer visualization"))
-      (notes . "GraphQL subscriptions ready for real-time updates."))
+    (medium-priority
+      ((issue-002
+         ((title . "No transfer history persistence")
+          (description . "Transfer records are lost on restart. Users cannot review past transfers.")
+          (type . "feature-gap")
+          (planned-for . "v1.1")))
 
-     ;; === FUTURE (v1.2+) ===
+       (issue-003
+         ((title . "Single-instance only architecture")
+          (description . "Cannot distribute load across multiple relay nodes.")
+          (type . "scalability")
+          (planned-for . "v1.2")))
 
-     ((name . "plugin-architecture")
-      (status . "planned")
-      (completion . 0)
-      (category . "infrastructure")
-      (phase . "design")
-      (description . "Dynamic analyzer and converter plugin loading")
-      (dependencies . ())
-      (blockers . ())
-      (next . ())
-      (notes . "v1.2 target"))
+       (issue-004
+         ((title . "No built-in deduplication")
+          (description . "Identical files transferred multiple times consume full bandwidth each time.")
+          (type . "optimization")
+          (planned-for . "v2.0")))))
 
-     ((name . "ml-classification")
-      (status . "planned")
-      (completion . 0)
-      (category . "ai")
-      (phase . "research")
-      (description . "Machine learning file classification")
-      (dependencies . ("plugin-architecture"))
-      (blockers . ())
-      (next . ())
-      (notes . "v1.2 target. Bumblebee/Nx integration candidate."))
+    (low-priority
+      ((issue-005
+         ((title . "Intelligence rules are compile-time only")
+          (description . "Cannot add custom filtering/routing rules without code changes.")
+          (type . "extensibility")
+          (planned-for . "v1.2-plugin-architecture")))))))
 
-     ((name . "distributed-coordination")
-      (status . "planned")
-      (completion . 0)
-      (category . "infrastructure")
-      (phase . "design")
-      (description . "Multi-instance relay coordination with shared job queue")
-      (dependencies . ())
-      (blockers . ())
-      (next . ())
-      (notes . "v1.2 target. Redis or PostgreSQL for job queue."))
+;;;============================================================================
+;;; QUESTIONS FOR USER
+;;;============================================================================
 
-     ((name . "content-addressable-storage")
-      (status . "planned")
-      (completion . 0)
-      (category . "infrastructure")
-      (phase . "research")
-      (description . "Deduplication via content hashing")
-      (dependencies . ())
-      (blockers . ())
-      (next . ())
-      (notes . "v2.0 target"))
+(define questions-for-user
+  '((strategic
+      ((q1 . "What is your primary use case? (personal media, enterprise backup, development artifacts, archival)")
+       (q2 . "Which cloud providers are highest priority for testing? (currently supports 40+ via Rclone)")
+       (q3 . "Is distributed/multi-instance deployment a near-term requirement?")
+       (q4 . "What is your target deployment environment? (bare metal, Kubernetes, cloud VMs)")))
 
-     ((name . "e2e-encryption")
-      (status . "planned")
-      (completion . 0)
-      (category . "security")
-      (phase . "research")
-      (description . "End-to-end encryption with Vault key management")
-      (dependencies . ())
-      (blockers . ())
-      (next . ())
-      (notes . "v2.0 target"))
+    (technical
+      ((q5 . "Should v1.1 prioritize Prometheus metrics or web dashboard first?")
+       (q6 . "Preferred web dashboard framework? (React, Svelte, LiveView, or headless API-only)")
+       (q7 . "Transfer history storage preference? (SQLite for persistence vs ETS for performance)")
+       (q8 . "Should intelligence rules become runtime-configurable before plugin architecture?")))
 
-     ((name . "enterprise-auth")
-      (status . "planned")
-      (completion . 0)
-      (category . "security")
-      (phase . "research")
-      (description . "LDAP/SAML authentication and RBAC")
-      (dependencies . ())
-      (blockers . ())
-      (next . ())
-      (notes . "v2.0 target")))
+    (operational
+      ((q9 . "Do you have existing Prometheus/Grafana infrastructure to integrate with?")
+       (q10 . "Are there compliance requirements affecting data handling? (GDPR, HIPAA, SOC2)")
+       (q11 . "Expected transfer volumes? (files/day, GB/day) for capacity planning")
+       (q12 . "Preferred CI/CD platform for releases? (GitHub Actions configured, others possible)")))
 
-    ;;=========================================================================
-    ;; KNOWN ISSUES
-    ;;=========================================================================
+    (community
+      ((q13 . "Is this intended for public open-source release or internal/private use?")
+       (q14 . "Should documentation be expanded for contributor onboarding?")
+       (q15 . "Interest in publishing to package managers? (Hex.pm, container registries)")))))
 
-    (issues
-     ((id . "CLI-TODO-1")
-      (severity . "low")
-      (file . "apps/laminar_web/lib/laminar/cli.ex")
-      (line . 757)
-      (description . "Size calculation not implemented - returns placeholder")
-      (impact . "laminar size command shows mock data"))
+;;;============================================================================
+;;; LONG-TERM ROADMAP
+;;;============================================================================
 
-     ((id . "CLI-TODO-2")
-      (severity . "low")
-      (file . "apps/laminar_web/lib/laminar/cli.ex")
-      (line . 782)
-      (description . "Check command not implemented")
-      (impact . "Cannot verify source/dest consistency"))
+(define roadmap
+  '((v1.0 . ((status . "released")
+             (date . "2025-11-27")
+             (theme . "Core MVP")
+             (features
+               ("Cloud-to-cloud streaming relay"
+                "Zero-persistence architecture"
+                "Intelligence decision engine"
+                "Broadway 4-lane pipeline"
+                "GraphQL + REST + CLI APIs"
+                "Container infrastructure"
+                "Comprehensive documentation"))))
 
-     ((id . "CLI-TODO-3")
-      (severity . "low")
-      (file . "apps/laminar_web/lib/laminar/cli.ex")
-      (line . 826)
-      (description . "rmdir command not implemented")
-      (impact . "Cannot remove remote directories via CLI"))
+    (v1.1 . ((status . "planned")
+             (theme . "Observability & Profiles")
+             (features
+               ("Transfer profiles (named configurations)"
+                "Prometheus metrics export"
+                "Grafana dashboard templates"
+                "Transfer history persistence"
+                "Web dashboard (basic)"
+                "Real-time transfer visualization"))))
 
-     ((id . "CLI-TODO-4")
-      (severity . "low")
-      (file . "apps/laminar_web/lib/laminar/cli.ex")
-      (line . 867)
-      (description . "Providers listing not implemented")
-      (impact . "Cannot list available cloud providers"))
+    (v1.2 . ((status . "planned")
+             (theme . "Extensibility & Scale")
+             (features
+               ("Plugin architecture"
+                "Custom analyzer loading"
+                "Third-party converter hooks"
+                "Multi-instance coordination"
+                "Load balancing"
+                "Shared job queue"
+                "Advanced intelligence (ML classification)"))))
 
-     ((id . "NICKEL-TODO-1")
-      (severity . "medium")
-      (file . "apps/laminar_web/lib/laminar/cli.ex")
-      (line . 905)
-      (description . "Profile loading from Nickel config not implemented")
-      (impact . "Cannot use named profiles"))
+    (v2.0 . ((status . "future")
+             (theme . "Enterprise & Dedup")
+             (features
+               ("Content-addressable storage"
+                "Block-level deduplication"
+                "Cross-transfer dedup"
+                "End-to-end encryption"
+                "Vault key management"
+                "Audit logging"
+                "LDAP/SAML authentication"
+                "RBAC permissions"
+                "Multi-tenant support"))))
 
-     ((id . "NICKEL-TODO-2")
-      (severity . "medium")
-      (file . "apps/laminar_web/lib/laminar/cli.ex")
-      (line . 911)
-      (description . "Set active profile not implemented")
-      (impact . "Cannot switch between profiles"))
+    (considered . ((status . "no-timeline")
+                   (features
+                     ("IPFS integration"
+                      "Blockchain transfer verification"
+                      "Mobile apps (iOS/Android)"
+                      "Desktop apps (Electron/Tauri)"
+                      "S3-compatible API facade"))))))
 
-     ((id . "NICKEL-TODO-3")
-      (severity . "medium")
-      (file . "apps/laminar_web/lib/laminar/cli.ex")
-      (line . 1064)
-      (description . "Load profile from Nickel config not implemented")
-      (impact . "Profile-based configuration unavailable"))
+;;;============================================================================
+;;; TECHNOLOGY STACK
+;;;============================================================================
 
-     ((id . "NO-WEB-UI")
-      (severity . "medium")
-      (file . #f)
-      (line . #f)
-      (description . "No web dashboard - CLI and GraphQL only")
-      (impact . "Users need technical knowledge to operate")))
+(define tech-stack
+  '((backend
+      ((elixir . "1.15+")
+       (phoenix . "1.7.10")
+       (absinthe . "GraphQL")
+       (broadway . "Pipeline processing")
+       (genstage . "Concurrent producer/consumer")
+       (finch . "HTTP client")
+       (telemetry . "Metrics")))
 
-    ;;=========================================================================
-    ;; QUESTIONS FOR PROJECT OWNER
-    ;;=========================================================================
+    (data-plane
+      ((rclone . "Cloud storage abstraction")
+       (ffmpeg . "Audio conversion")
+       (imagemagick . "Image conversion")
+       (zstd . "Compression")))
 
-    (questions
-     ((id . "Q1")
-      (priority . "high")
-      (topic . "v1.1 Priority")
-      (question . "What's the priority order for v1.1 features?")
-      (options . ("Nickel config completion"
-                  "Web dashboard"
-                  "Prometheus metrics"
-                  "Transfer history"))
-      (context . "All are independent - can be parallelized or sequenced"))
+    (infrastructure
+      ((podman . "Container runtime")
+       (wolfi . "Base image")
+       (oil-shell . "Installation scripts")
+       (just . "Task automation")))
 
-     ((id . "Q2")
-      (priority . "high")
-      (topic . "Web Framework")
-      (question . "Which framework for the web dashboard?")
-      (options . ("Phoenix LiveView (native Elixir, real-time)"
-                  "React (ecosystem, hiring pool)"
-                  "Svelte (small bundle, fast)"))
-      (context . "GraphQL subscriptions ready. LiveView would eliminate JS build."))
+    (testing
+      ((exunit . "Unit tests")
+       (credo . "Static analysis")
+       (dialyxir . "Type checking")
+       (excoveralls . "Coverage")))))
 
-     ((id . "Q3")
-      (priority . "medium")
-      (topic . "Configuration Approach")
-      (question . "Continue with Nickel or switch to simpler config?")
-      (options . ("Nickel (type-safe, powerful)"
-                  "TOML (simple, familiar)"
-                  "Elixir Config (native, no external tools)"))
-      (context . "Nickel schema exists but integration incomplete. TOML would be faster."))
+;;;============================================================================
+;;; CRITICAL NEXT ACTIONS
+;;;============================================================================
 
-     ((id . "Q4")
-      (priority . "medium")
-      (topic . "History Storage")
-      (question . "Backend for transfer history persistence?")
-      (options . ("SQLite (simple, embedded)"
-                  "PostgreSQL (scalable, distributed-ready)"
-                  "ETS with periodic dump (in-memory, Elixir native)"))
-      (context . "SQLite fits single-node. PostgreSQL needed for v1.2 distributed mode."))
+(define next-actions
+  '((immediate
+      ((action-1 . "User to answer strategic questions for v1.1 prioritization")
+       (action-2 . "Decide on transfer history storage mechanism")
+       (action-3 . "Choose web dashboard framework or defer to API-only")))
 
-     ((id . "Q5")
-      (priority . "low")
-      (topic . "Authentication")
-      (question . "Authentication for RC API and web UI?")
-      (options . ("None (localhost only)"
-                  "Basic Auth (simple)"
-                  "JWT (stateless)"
-                  "OAuth2 (enterprise-ready)"))
-      (context . "Currently localhost-only. Remote access needs auth."))
+    (short-term
+      ((action-4 . "Implement transfer profiles schema and CLI integration")
+       (action-5 . "Add Prometheus telemetry exporter")
+       (action-6 . "Create initial Grafana dashboard JSON")))
 
-     ((id . "Q6")
-      (priority . "low")
-      (topic . "Cloud Provider Priority")
-      (question . "Any cloud providers to prioritize for deeper integration?")
-      (options . ("Generic Rclone only"
-                  "S3-compatible focus (AWS, Backblaze, MinIO)"
-                  "Google Workspace integration"
-                  "Microsoft 365 integration"))
-      (context . "Rclone handles all generically. Deeper integration = better UX.")))
+    (medium-term
+      ((action-7 . "Design plugin architecture specification")
+       (action-8 . "Evaluate multi-instance coordination approaches")
+       (action-9 . "Research content-addressable storage implementations")))))
 
-    ;;=========================================================================
-    ;; ROUTE TO MVP v1.1
-    ;;=========================================================================
+;;;============================================================================
+;;; SESSION NOTES
+;;;============================================================================
 
-    (critical-next
-     ("Complete Nickel profile loading (cli.ex:905,911,1064) - unblocks transfer-profiles"
-      "Add Prometheus metrics endpoint - foundation for observability"
-      "Implement remaining CLI commands (size, check, rmdir, providers)"
-      "Choose web dashboard framework and create wireframes"
-      "Design transfer history schema"))
+(define session-notes
+  '((session-id . "2025-12-08-initial-state")
+    (summary . "Created initial STATE.scm capturing project status post-v1.0 release")
+    (decisions . ())
+    (blockers . ("Awaiting user input on v1.1 priorities"))
+    (next-session-focus . "Review questions, prioritize v1.1 features, begin implementation")))
 
-    ;;=========================================================================
-    ;; LONG-TERM ROADMAP
-    ;;=========================================================================
+;;;============================================================================
+;;; QUERIES (minikanren-style helpers)
+;;;============================================================================
 
-    (roadmap
-     ((version . "1.1")
-      (theme . "Enhanced Monitoring & Configuration")
-      (eta . "TBD")
-      (features . ("Transfer profiles with Nickel config"
-                   "Prometheus metrics endpoint"
-                   "Grafana dashboard templates"
-                   "Transfer history persistence"
-                   "Web dashboard MVP")))
+;;; Example queries for state introspection:
+;;;
+;;; (get-current-focus)      => Returns current project phase and status
+;;; (get-blocked-projects)   => Returns list of blockers
+;;; (get-next-actions)       => Returns prioritized action list
+;;; (get-open-questions)     => Returns unanswered questions
+;;; (get-completion-percent) => Returns overall progress
 
-     ((version . "1.2")
-      (theme . "Extensibility & Intelligence")
-      (eta . "TBD")
-      (features . ("Plugin architecture for analyzers/converters"
-                   "Machine learning file classification"
-                   "Adaptive compression selection"
-                   "Multi-instance distributed coordination"
-                   "Shared job queue (Redis/PostgreSQL)")))
+(define (get-current-focus)
+  (assoc 'phase current-position))
 
-     ((version . "2.0")
-      (theme . "Enterprise & Security")
-      (eta . "TBD")
-      (features . ("Content-addressable storage with deduplication"
-                   "End-to-end encryption"
-                   "Key management integration (Vault)"
-                   "LDAP/SAML authentication"
-                   "Role-based access control"
-                   "Multi-tenant support")))
+(define (get-blocked-items)
+  (assoc 'high-priority issues))
 
-     ((version . "future")
-      (theme . "Exploration")
-      (eta . #f)
-      (features . ("IPFS integration"
-                   "Blockchain verification receipts"
-                   "iOS/Android mobile apps"))))
+(define (get-next-milestone)
+  (car (assoc 'milestones route-to-v1.1)))
 
-    ;;=========================================================================
-    ;; SESSION TRACKING
-    ;;=========================================================================
-
-    (session
-     (conversation-id . "claude/create-state-scm-01788UbjENfqhA2Nmx7XQ5UH")
-     (started-at . "2025-12-08")
-     (purpose . "Create STATE.scm for project state documentation")
-     (messages-used . 0)
-     (token-limit-reached . #f))
-
-    (history
-     (snapshots
-      ((date . "2025-11-27")
-       (milestone . "v1.0.0 Release")
-       (completed . ("core-streaming-relay"
-                     "intelligence-engine"
-                     "4-lane-broadway-pipeline"
-                     "graphql-api"
-                     "refinery-format-conversion"
-                     "ghost-links"
-                     "containerized-deployment"
-                     "documentation"
-                     "test-suite")))))
-
-    (files-created-this-session
-     ("STATE.scm"))
-
-    (files-modified-this-session ())
-
-    (context-notes . "
-Laminar v1.0.0 is production-ready and shipped. The core value proposition
-(zero-persistence cloud-to-cloud streaming with intelligent routing) is fully
-realized. The v1.1 roadmap focuses on operational maturity: configuration
-profiles, monitoring, and a web UI. Key technical decisions needed around
-web framework choice and configuration approach. No critical bugs - only
-enhancement TODOs remain.")))
-
-;; =============================================================================
-;; USAGE
-;; =============================================================================
-;;
-;; 1. Download this file at the end of each Claude session
-;; 2. Upload at the start of the next conversation
-;; 3. Claude will parse the state and resume context
-;;
-;; Query examples (with minikanren):
-;;   (run* (q) (fresh (p) (membero `(status . "in-progress") p) (membero p projects)))
-;;   → Returns all in-progress projects
-;;
-;; =============================================================================
+;;; EOF
