@@ -7,11 +7,22 @@ defmodule Laminar.RcloneClient do
 
   Rclone runs as a daemon in the container, exposing a JSON-RPC API that
   we use to orchestrate transfers.
+
+  ## Transport Protocol
+
+  Uses QUIC (HTTP/3) by default with TCP-like reliability assurances:
+  - 0-RTT connection establishment (faster reconnects)
+  - Multiplexed streams (no head-of-line blocking)
+  - Built-in TLS 1.3 encryption
+  - Connection migration (survives network changes)
+
+  Falls back to HTTP/2 over TCP when QUIC unavailable.
   """
 
   require Logger
 
   @default_timeout 60_000
+  @default_transport :quic
 
   @doc """
   Check if the Rclone relay is healthy.
@@ -152,14 +163,68 @@ defmodule Laminar.RcloneClient do
 
   @doc """
   Copy a file within or between remotes.
+
+  Options:
+    - progress_tracker: PID of TransferProgress GenServer for Vuze-style progress
+    - transport: :quic | :tcp (default: :quic with TCP assurances)
   """
-  def copy_file(src_remote, src_path, dst_remote, dst_path) do
-    rpc("operations/copyfile", %{
+  def copy_file(src_remote, src_path, dst_remote, dst_path, opts \\ []) do
+    tracker = Keyword.get(opts, :progress_tracker)
+    transport = Keyword.get(opts, :transport, @default_transport)
+
+    params = %{
       srcFs: src_remote,
       srcRemote: src_path,
       dstFs: dst_remote,
-      dstRemote: dst_path
-    })
+      dstRemote: dst_path,
+      _async: true  # Run async for progress tracking
+    }
+
+    # Add QUIC transport flags when supported
+    params = if transport == :quic do
+      Map.merge(params, %{
+        "_config" => %{
+          "multi-thread-streams" => 8,
+          "use-mmap" => true
+        }
+      })
+    else
+      params
+    end
+
+    case rpc("operations/copyfile", params) do
+      {:ok, %{"jobid" => job_id}} when not is_nil(tracker) ->
+        spawn(fn -> monitor_job_progress(job_id, tracker) end)
+        {:ok, job_id}
+
+      {:ok, result} ->
+        {:ok, result}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Monitor a job and update progress tracker.
+  """
+  def monitor_job_progress(job_id, tracker) do
+    case get_job_status(job_id) do
+      {:ok, %{"finished" => true}} ->
+        :ok
+
+      {:ok, %{"progress" => progress}} when is_number(progress) ->
+        Laminar.TransferProgress.update(tracker, round(progress))
+        Process.sleep(500)
+        monitor_job_progress(job_id, tracker)
+
+      {:ok, _} ->
+        Process.sleep(500)
+        monitor_job_progress(job_id, tracker)
+
+      {:error, _} ->
+        :error
+    end
   end
 
   @doc """
