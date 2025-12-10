@@ -9,124 +9,122 @@
 
 == Overview
 
-Laminar is a high-speed, cloud-to-cloud streaming relay that transfers data between cloud storage providers (Dropbox, Google Drive, S3, etc.) without downloading files to local persistent storage. Data flows through RAM buffers in parallel "laminar" streams, achieving maximum throughput while maintaining cryptographic integrity.
+Laminar is a cloud-to-cloud streaming relay that transfers data between cloud storage providers (Dropbox, Google Drive, S3, etc.) without downloading files to local persistent storage.
 
-=== Why "Laminar"?
+=== Current Status: v1.2.0
 
-In fluid dynamics, *laminar flow* occurs when a fluid flows in parallel layers with no disruption between them. This perfectly describes our architecture: parallel data streams flowing smoothly from source to destination without turbulence (thrashing, random writes, or disk I/O bottlenecks).
+[IMPORTANT]
+====
+**Honest Assessment**: Laminar v1.2.0 contains both working code and aspirational architecture. See link:TRIAL_AND_ERROR.adoc[TRIAL_AND_ERROR.adoc] for what works, what doesn't, and what was learned.
+
+**What Actually Works**:
+
+* `orchestrator.ex` - Main API, actually usable
+* `transfer_progress.ex` - Vuze-style progress tracking
+* `rclone_client.ex` - Core rclone RC API integration
+* `declarative.ex` - Cruft detection (file traversal parts)
+
+**What's Aspirational (Not Functional)**:
+
+* GPU/DPDK/io_uring acceleration (would need NIFs)
+* Multi-protocol swarming (Google Drive only speaks HTTPS)
+* Shamir secret sharing (crypto implementation is wrong)
+====
+
+== Quick Start (Actually Works)
+
+[source,bash]
+----
+# Simple transfer - this is what you probably want
+Laminar.Orchestrator.transfer("dropbox:Photos", "gdrive:backup/Photos")
+
+# Or just use rclone directly (equally effective)
+rclone copy dropbox:Photos gdrive:backup/Photos --progress
+----
 
 == Architecture
 
 [source]
 ----
-┌─────────────┐     ┌──────────────────────────────────────┐     ┌─────────────┐
-│   Dropbox   │────▶│          LAMINAR RELAY               │────▶│Google Drive │
-│   (Source)  │     │  ┌─────────┐  ┌─────────────────┐   │     │   (Dest)    │
-└─────────────┘     │  │ RAM     │  │ Elixir Control  │   │     └─────────────┘
-                    │  │ Buffer  │──│ Plane (GraphQL) │   │
-                    │  │ (Tier1) │  └─────────────────┘   │
-                    │  └─────────┘           │            │
-                    │       │                │            │
-                    │  ┌─────────┐  ┌─────────────────┐   │
-                    │  │ NVMe    │  │ Rclone Engine   │   │
-                    │  │ Stage   │──│ (Data Plane)    │   │
-                    │  │ (Tier2) │  └─────────────────┘   │
-                    │  └─────────┘                        │
-                    └──────────────────────────────────────┘
+┌─────────────┐     ┌────────────────────────────────────┐     ┌─────────────┐
+│   Dropbox   │────▶│          LAMINAR RELAY             │────▶│Google Drive │
+│   (Source)  │     │                                    │     │   (Dest)    │
+└─────────────┘     │  ┌──────────────────────────────┐  │     └─────────────┘
+                    │  │ Orchestrator (GenServer)     │  │
+                    │  │   └── TransferProgress       │  │
+                    │  │   └── RcloneClient           │  │
+                    │  └──────────────────────────────┘  │
+                    │                 │                  │
+                    │  ┌──────────────────────────────┐  │
+                    │  │ Rclone RC API (localhost)    │  │
+                    │  │   └── Actually does transfer │  │
+                    │  └──────────────────────────────┘  │
+                    └────────────────────────────────────┘
 ----
 
-=== Key Components
+== Modules
 
-* **Control Plane**: Elixir + Phoenix + Absinthe (GraphQL API)
-* **Data Plane**: Rclone with optimized parallel streaming
-* **Storage Tiers**: RAM (Tier 1) + NVMe (Tier 2) volatile caching
-* **Container Runtime**: Podman with Chainguard Wolfi base
-* **Network Physics**: TCP BBR, GRO enabled, LRO disabled
+=== Working (Use These)
 
-== Features
+[cols="1,3"]
+|===
+| Module | Purpose
 
-=== Core Capabilities
+| `orchestrator.ex`
+| Main API - call `Laminar.Orchestrator.transfer/3`
 
-* **Zero Persistence**: Data never touches permanent storage
-* **Parallel Streaming**: 32+ concurrent transfers with multi-thread streams
-* **Content-Aware Routing**: Text → compression, media → passthrough
-* **Ghost Links**: Create URL stubs for massive files instead of transferring
-* **Refinery Pipeline**: Convert formats on-the-fly (WAV→FLAC, BMP→WebP)
-* **Intelligent Filtering**: Auto-exclude `node_modules/`, build artifacts, OS junk
+| `transfer_progress.ex`
+| EMA-smoothed progress tracking like Vuze/Azureus
 
-=== Network Optimizations
+| `rclone_client.ex`
+| HTTP client for rclone RC API
 
-* **TCP BBR**: Bottleneck Bandwidth and Round-trip propagation time
-* **eDNS Client Subnet**: Route to nearest CDN edge
-* **Buffer Tuning**: 16MB TCP buffers for high BDP paths
-* **Coalescence**: GRO enabled, LRO disabled for container safety
+| `declarative.ex`
+| Cruft detection, config templating concepts
+|===
 
-== Quick Start
+=== Experimental (May Not Work)
 
-[source,bash]
-----
-# 1. Initialize environment (requires root)
-sudo ./scripts/install.osh
+[cols="1,3"]
+|===
+| Module | Issue
 
-# 2. Tune network physics
-just tune-network
+| `accelerator.ex`
+| Flag generation OK, actual acceleration untested
 
-# 3. Build the refinery container
-just build-all
+| `transport.ex`
+| Verification sampling concept OK, crypto needs work
 
-# 4. Configure your remotes (interactive)
-just setup-remotes
+| `supply_chain.ex`
+| Good ideas, not wired to anything
+|===
 
-# 5. Start the relay
-just up
+=== Aspirational (Don't Expect These to Work)
 
-# 6. Start the control plane
-just start-brain
-----
+[cols="1,3"]
+|===
+| Module | Why It's Broken
 
-== Usage
+| `hyperaccel.ex`
+| GPU/DPDK/io_uring need C NIFs, not pure Elixir
 
-=== GraphQL API
+| `multiprotocol.ex`
+| Google Drive doesn't speak FTP/Gopher/NNTP
 
-[source,graphql]
-----
-mutation {
-  startLaminarStream(
-    source: "dropbox:/Photos"
-    destination: "gdrive:/Backup/Photos"
-    parallelism: 32
-    swarmStreams: 8
-    bufferSize: "128M"
-  ) {
-    id
-    status
-    speed
-    percentage
-  }
-}
-----
+| `pathfinder.ex`
+| Shamir implementation is mathematically wrong
 
-=== Direct CLI
-
-[source,bash]
-----
-# Quick transfer
-just stream dropbox:Source gdrive:Dest
-
-# Smart transfer with filtering
-just smart-stream dropbox:Projects gdrive:Backup
-----
+| `benchmarks.ex`
+| Just documentation, no actual benchmarking code
+|===
 
 == Configuration
 
-See `config/config.json` for runtime configuration and `config/filters.txt` for exclusion rules.
+See `config/config.json` for runtime configuration.
 
-== Documentation
+== What We Learned
 
-* link:cookbook.adoc[Cookbook] - Detailed recipes and tuning guides
-* link:CLAUDE.adoc[AI Assistant Guide] - For AI-assisted development
-* link:SECURITY.adoc[Security] - Security policies and practices
-* link:CONTRIBUTING.adoc[Contributing] - How to contribute
+See link:TRIAL_AND_ERROR.adoc[TRIAL_AND_ERROR.adoc] for a detailed post-mortem of what worked and what didn't.
 
 == License
 

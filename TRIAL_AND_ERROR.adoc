@@ -1,0 +1,382 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2025 Laminar Contributors
+
+= Trial and Error: What We Tried, What Failed, What We Learned
+:toc: left
+:toclevels: 3
+:icons: font
+
+== Overview
+
+This document is an honest post-mortem of the Laminar v1.2.0 development session. It documents ideas that were tried, what worked, what failed, and why.
+
+**Session Duration**: ~2 hours
+**Code Written**: ~140KB across 9 new modules
+**Code That Works**: ~40KB (30%)
+**Code That's Aspirational**: ~100KB (70%)
+
+== The Good
+
+=== TransferProgress Module
+**Status**: ✅ Works
+
+The Vuze/Azureus-style progress tracker is clean, correct, and useful:
+
+* EMA (Exponential Moving Average) for smoothed speed estimation
+* Speed trend detection (accelerating/stable/slowing)
+* Proper GenServer implementation
+* Would integrate well with any transfer system
+
+**Lesson**: Simple, focused modules that do one thing well are more valuable than complex frameworks.
+
+=== Orchestrator Module
+**Status**: ✅ Works
+
+Added as a fix after realizing no module was wired together:
+
+* Simple public API: `transfer(source, destination, opts)`
+* Proper supervision tree integration
+* Coordinates between TransferProgress and RcloneClient
+
+**Lesson**: Always build the glue code first, not last.
+
+=== Cruft Detection Patterns
+**Status**: ✅ Useful
+
+The list of patterns in `declarative.ex` for detecting skippable files:
+
+* `.git/`, `node_modules/`, `__pycache__/`
+* `.DS_Store`, `Thumbs.db`
+* Build artifacts, logs, temp files
+
+**Lesson**: Domain knowledge (what to skip) is more valuable than clever algorithms.
+
+=== Benchmarks Documentation
+**Status**: ✅ Educational
+
+Comparing against Netflix/HFT/CDN systems provided useful context:
+
+* Helped understand what's actually possible
+* Showed where Laminar fits (bulk transfer, not low-latency)
+* Good reference material for future development
+
+== The Bad
+
+=== Transport Verification
+**Status**: ⚠️ Partially Broken
+
+The concept of sampling-based verification is sound:
+
+* Small files: full checksum
+* Medium files: head/tail + random samples
+* Large files: statistical sampling
+
+**What's Wrong**: The actual implementation doesn't call rclone's hashsum API correctly. Would need testing and fixes.
+
+**Lesson**: Test the API integration before building abstractions on top of it.
+
+=== Accelerator Flags
+**Status**: ⚠️ Untested
+
+Generating rclone command flags based on file size is a good idea:
+
+* Segment sizes, buffer sizes, parallelism levels
+
+**What's Wrong**: Never tested if rclone actually accepts these flags via RC API. The RC API is JSON-RPC, not command-line flags.
+
+**Lesson**: Understand the API you're wrapping before wrapping it.
+
+=== Supply Chain Dedup
+**Status**: ⚠️ Not Integrated
+
+Content-addressable storage and multi-source fetching concepts are sound:
+
+* "Do you have SHA256:abc123?" - good idea
+* "Fetch from IPFS instead" - good idea
+
+**What's Wrong**: Not connected to anything. Just standalone functions.
+
+**Lesson**: Architecture without integration is just documentation.
+
+== The Ugly
+
+=== Shamir Secret Sharing (pathfinder.ex)
+**Status**: ❌ Cryptographically Wrong
+
+The implementation is fundamentally broken:
+
+* Uses XOR where polynomial evaluation is needed
+* Lagrange interpolation is incorrect
+* Would NOT actually provide secret sharing security
+
+**What I Should Have Done**: Use an existing library (e.g., `sss-rs` via NIF) or not include it at all.
+
+**Lesson**: Never roll your own crypto, especially under time pressure.
+
+=== GPU Checksum (hyperaccel.ex)
+**Status**: ❌ Pure Fantasy
+
+Claimed to do GPU-accelerated checksums but:
+
+* No CUDA NIF
+* No OpenCL binding
+* Just spawns Elixir tasks and calls it "GPU parallel"
+
+**Reality**: Would need 1000+ lines of C/CUDA code and a proper NIF wrapper.
+
+**Lesson**: Don't claim features you can't deliver. Aspirational code should be clearly marked.
+
+=== DPDK/io_uring (hyperaccel.ex)
+**Status**: ❌ Impossible in Pure Elixir
+
+Both require:
+
+* C code for kernel bypass (DPDK)
+* NIF wrapper for io_uring syscalls
+* Root permissions
+* Special kernel modules/configuration
+
+**What I Wrote**: Empty functions that return `:ok`
+
+**Lesson**: Know your runtime's limitations. BEAM can't do kernel bypass.
+
+=== Multi-Protocol Swarming (multiprotocol.ex)
+**Status**: ❌ Wrong Target
+
+The idea of using multiple protocols simultaneously:
+
+* HTTP/3 + SFTP + FTP + Gopher in parallel
+
+**Why It's Wrong**: Google Drive only speaks HTTPS. You can't FTP to Google Drive. You can't Gopher to Google Drive.
+
+**What Would Actually Work**: Multiple HTTP/3 connections, which rclone already does with `--transfers=N`.
+
+**Lesson**: Understand the target system's capabilities before designing around them.
+
+=== Gopher/NNTP Handlers
+**Status**: ❌ Pointless
+
+Wrote actual protocol handlers for Gopher (port 70) and NNTP (port 119).
+
+**Why Pointless**: No cloud storage provider supports these protocols. They're for different use cases entirely.
+
+**Potential Salvage**: Could be useful as webhook triggers (see Future Ideas).
+
+== The Pointless
+
+=== HFT Latency Comparisons
+Comparing Laminar to Goldman Sachs's nanosecond trading systems is absurd. File transfer doesn't need nanosecond latency.
+
+=== Microwave Link Discussion
+You're not building a cross-Atlantic trading link. This was pure distraction.
+
+=== BGP Routing Optimization
+End users don't control BGP. This was irrelevant.
+
+=== cFOS Traffic Shaping
+The OS already does this. Rclone has `--bwlimit`. Reimplementing it is waste.
+
+== What We Actually Needed
+
+For the actual goal (Dropbox → Google Drive migration), all we needed was:
+
+[source,bash]
+----
+rclone copy dropbox: gdrive:backup --progress --transfers 8
+----
+
+Everything else was over-engineering.
+
+== Future Ideas Worth Pursuing
+
+=== Gopher as Webhook Trigger
+**Salvageable from**: `multiprotocol.ex`
+
+Gopher is ultra-lightweight (~10 bytes overhead). Could use it as a signaling mechanism:
+
+* Send Gopher request to trigger server
+* Server receives "selector" (like a command)
+* Server executes actual operation via proper APIs
+
+This separates signaling (lightweight) from data transfer (heavyweight).
+
+=== Declarative Templates
+**Salvageable from**: `declarative.ex`
+
+Sending Nickel/Guile templates instead of 100 config files is genuinely useful:
+
+* 100 configs (10MB) → 1 template (5KB)
+* Install generator on dest, send template, regenerate
+
+Needs actual implementation and testing.
+
+=== Content-Addressable Dedup
+**Salvageable from**: `supply_chain.ex`
+
+Before sending, ask destination "do you have SHA256:X?". Skip if yes.
+
+Docker does this. Git does this. It works.
+
+== Conclusions
+
+=== Time Spent vs Value Delivered
+
+[cols="1,1,1"]
+|===
+| Activity | Time | Value
+
+| Writing transfer_progress.ex
+| 10 min
+| High
+
+| Writing orchestrator.ex
+| 5 min
+| High
+
+| Writing hyperaccel.ex
+| 20 min
+| Near Zero
+
+| Writing multiprotocol.ex
+| 20 min
+| Zero
+
+| Writing pathfinder.ex crypto
+| 25 min
+| Negative (misleading)
+
+| Benchmarks documentation
+| 15 min
+| Medium (educational)
+|===
+
+=== Key Lessons
+
+1. **Start with integration, not features**: Build the glue first
+2. **Test against real APIs**: Don't assume how things work
+3. **Mark aspirational code clearly**: Don't mix fantasy with reality
+4. **Know your runtime**: Elixir can't do kernel bypass
+5. **Understand the target**: Google Drive speaks HTTPS, not Gopher
+6. **Simple beats clever**: `rclone copy` already works
+
+=== What Would I Do Differently?
+
+1. Write `orchestrator.ex` first
+2. Test against real rclone RC API immediately
+3. Skip all hardware acceleration claims
+4. Focus on the actual value-add: progress tracking, cruft detection, declarative templates
+5. Document aspirations separately from implementation
+
+== WHAT IF... (Future Speculation)
+
+This section documents ideas that might be dumb, but at least we documented them. Maybe one day someone reads this and says "ah but if we did THIS..."
+
+=== What if: Gopher as Universal Trigger?
+
+Gopher is 10 bytes overhead. HTTP is hundreds. What if every cloud service exposed a Gopher endpoint for lightweight commands?
+
+* `gopher://transfer.svc/0start dropbox:/ gdrive:/`
+* No TLS handshake, no headers, just action
+* Response: `OK:job123` or `ERR:auth`
+
+**Why it might work**: Reduces trigger latency to ~1ms
+**Why it probably won't**: Security. No one will expose unencrypted command endpoints.
+
+=== What if: NNTP for Distributed Transfers?
+
+NNTP is designed for distributing articles across thousands of servers. What if we used the same pattern?
+
+* Post "transfer manifest" to newsgroup
+* All peers with relevant data respond
+* Requester pulls from nearest peer
+
+**Why it might work**: Like BitTorrent DHT but with existing infrastructure
+**Why it probably won't**: NNTP servers are dying. Nobody runs them anymore.
+
+=== What if: Shamir Actually Worked?
+
+If we used REAL Shamir's Secret Sharing (polynomial interpolation over finite fields):
+
+* Split file into 5 shares
+* Send each share via different route/protocol
+* Attacker needs 3+ shares to reconstruct
+* We need any 3 to reconstruct
+
+**Why it might work**: Genuinely increases security
+**Why it probably won't**: Performance penalty (~3x data), complexity, proper crypto libraries needed
+
+=== What if: GPU Really Did Checksums?
+
+If we wrote proper CUDA NIFs:
+
+* SHA256 at ~10 GB/s (vs CPU ~500 MB/s)
+* 20x speedup for verification
+* Worth it for large files
+
+**Why it might work**: GPUs are embarrassingly parallel
+**Why it probably won't**: NIF development is hard, GPU driver compatibility is hell
+
+=== What if: DPDK for Cloud-to-Cloud?
+
+If we ran a dedicated transfer box with DPDK:
+
+* Bypass kernel entirely
+* Handle 10+ Gbps on commodity hardware
+* Sub-millisecond packet processing
+
+**Why it might work**: This is literally how CDNs work
+**Why it probably won't**: Need dedicated hardware, root access, complex deployment
+
+=== What if: io_uring was Easy?
+
+If Elixir had first-class io_uring support:
+
+* Batch thousands of I/O operations
+* Single syscall for many operations
+* 2-3x throughput improvement
+
+**Why it might work**: io_uring is production-ready in Linux 5.10+
+**Why it probably won't**: BEAM scheduler doesn't mesh well with completion-based I/O
+
+=== What if: Declarative Really Minimized?
+
+If we sent Nix expressions instead of files:
+
+* `{ nixpkgs.python310, requirements = ./reqs.txt }`
+* Destination: `nix-build` → identical environment
+* Transfer: 5KB instead of 500MB
+
+**Why it might work**: Nix is deterministic, reproducible builds are real
+**Why it probably won't**: Nix learning curve, destination needs Nix installed
+
+=== What if: This Was a Database Paper?
+
+Reframe the problem academically:
+
+* "Efficient Cross-Cloud Data Migration with Minimal Transit"
+* Formal model of cloud storage as distributed hash tables
+* Prove optimality bounds for deduplication
+* Actually publish it
+
+**Why it might work**: Could advance the field, get citations
+**Why it probably won't**: We're building a tool, not writing papers
+
+=== What if: Someone Reads This in 2030?
+
+What might have changed:
+
+* QUIC might have replaced TCP entirely
+* WebTransport might be universal
+* Cloud storage might federate via ActivityPub
+* Edge computing might make relays obsolete
+* AI might just solve transfers automatically
+
+**Message to future reader**: Whatever problems we were solving probably don't exist anymore. But maybe the thinking process is still useful.
+
+== Summary
+
+We tried many things. Some worked. Many didn't. The honest assessment is that 30% of the code is useful, and 70% is aspirational architecture that needs significant work to become functional.
+
+The core lesson: **shipping something simple that works beats shipping something complex that doesn't.**
+
+But maybe... just maybe... some of these ideas weren't completely stupid. If you're reading this and thinking "what if...", please do try. Document your failures too. That's how we learn.

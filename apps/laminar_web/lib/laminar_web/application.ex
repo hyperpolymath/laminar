@@ -15,6 +15,8 @@ defmodule LaminarWeb.Application do
       {Phoenix.PubSub, name: LaminarWeb.PubSub},
       # Start Finch HTTP client for Rclone RC API
       {Finch, name: LaminarWeb.Finch},
+      # Start the transfer orchestrator
+      Laminar.Orchestrator,
       # Start the Endpoint
       LaminarWeb.Endpoint
     ]
