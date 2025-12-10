@@ -1,0 +1,36 @@
+= laminar - Citation Guide
+:toc:
+
+== BibTeX
+
+[source,bibtex]
+----
+@software{laminar_2025,
+  author = {Polymath, Hyper},
+  title = {laminar},
+  year = {2025},
+  url = {https://github.com/hyperpolymath/laminar},
+  license = {AGPL-3.0-or-later}
+}
+----
+
+== Harvard Style
+
+Polymath, H. (2025) _laminar_ [Computer software]. Available at: https://github.com/hyperpolymath/laminar
+
+== OSCOLA
+
+Hyper Polymath, 'laminar' (2025) <https://github.com/hyperpolymath/laminar>
+
+== MLA
+
+Polymath, Hyper. "laminar." 2025, github.com/hyperpolymath/laminar.
+
+== APA 7
+
+Polymath, H. (2025). _laminar_ [Computer software]. GitHub. https://github.com/hyperpolymath/laminar
+
+== See Also
+
+* link:../CITATION.cff[CITATION.cff]
+* link:../codemeta.json[codemeta.json]

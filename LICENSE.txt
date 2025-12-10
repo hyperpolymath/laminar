@@ -1,3 +1,12 @@
+SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Palimpsest-0.5
+
+This software is dual-licensed under:
+  1. GNU Affero General Public License v3.0 or later
+  2. Palimpsest License v0.5
+
+See https://spdx.org/licenses/ for license details.
+================================================================================
+
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
