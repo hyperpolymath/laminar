@@ -7,9 +7,9 @@
 ;;; METADATA
 ;;;============================================================================
 
-(define state-version "1.0.0")
+(define state-version "1.1.0")
 (define state-created "2025-12-08T00:00:00Z")
-(define state-updated "2025-12-08T00:00:00Z")
+(define state-updated "2025-12-11T00:00:00Z")
 (define state-schema "hyperpolymath/state.scm@v1")
 
 ;;;============================================================================
@@ -22,7 +22,7 @@
     (description . "Transfer data between cloud storage providers without downloading to local persistent storage. Data flows through RAM and ephemeral NVMe cache like laminar fluid flow - parallel layers streaming smoothly without disruption.")
     (repository . "https://github.com/hyperpolymath/laminar")
     (license . "Apache-2.0")
-    (version . "1.0.0")
+    (version . "1.1.0-dev")
     (released . "2025-11-27")))
 
 ;;;============================================================================
@@ -30,10 +30,10 @@
 ;;;============================================================================
 
 (define current-position
-  '((phase . "post-mvp-stabilization")
-    (milestone . "v1.0.0-released")
+  '((phase . "parallel-transfer-optimization")
+    (milestone . "multi-sa-credential-pool")
     (completion-percent . 100)
-    (status . "production-ready")
+    (status . "feature-complete")
 
     (achievements
       ((core-relay . "complete")
@@ -44,15 +44,23 @@
        (container-infrastructure . "complete")
        (documentation . "complete")
        (test-coverage . "complete")
-       (ci-cd-pipelines . "complete")))
+       (ci-cd-pipelines . "complete")
+       ;; NEW in v1.1.0-dev
+       (credential-pool . "complete")
+       (parallel-transfer . "complete")
+       (toc-optimization . "complete")
+       (quota-tracking . "complete")))
 
     (metrics
-      ((source-lines . 3391)
+      ((source-lines . 5317)
        (test-lines . 1402)
        (just-recipes . 143)
        (cloud-providers-supported . 40)
        (concurrent-transfers . 32)
-       (pipeline-lanes . 4)))))
+       (pipeline-lanes . 4)
+       ;; NEW metrics
+       (max-service-accounts . "unlimited")
+       (aggregate-quota-per-sa . "750GB/day")))))
 
 ;;;============================================================================
 ;;; ARCHITECTURE SUMMARY
@@ -63,7 +71,10 @@
       ((language . "Elixir 1.15+")
        (framework . "Phoenix 1.7.10")
        (api . "Absinthe GraphQL")
-       (pipeline . "Broadway 4-lane")))
+       (pipeline . "Broadway 4-lane")
+       ;; NEW components
+       (credential-pool . "GenServer multi-SA manager")
+       (parallel-transfer . "TOC-optimized coordinator")))
 
     (data-plane
       ((engine . "Rclone")
@@ -84,19 +95,128 @@
     (container
       ((runtime . "Podman rootless")
        (base-image . "Chainguard Wolfi")
-       (security . "non-root, read-only rootfs")))))
+       (security . "non-root, read-only rootfs")))
+
+    ;; NEW: Multi-SA architecture
+    (credential-management
+      ((pool . "CredentialPool GenServer")
+       (rotation . "automatic on quota exhaustion")
+       (tracking . "per-SA daily quota with reset")
+       (import . "bulk from folder of .json files")))))
 
 ;;;============================================================================
-;;; ROUTE TO v1.1 (NEXT MVP ITERATION)
+;;; THEORY OF CONSTRAINTS ANALYSIS
+;;;============================================================================
+
+(define toc-analysis
+  '((constraint-migration-path
+      ((step-1
+         ((constraint . "Google Drive 750GB/day quota")
+          (action . "Add multiple service accounts")
+          (result . "Constraint moves to download bandwidth")))
+       (step-2
+         ((constraint . "Dropbox download throughput")
+          (action . "Parallel streams (--multi-thread-streams 8)")
+          (result . "Constraint moves to network/API")))
+       (step-3
+         ((constraint . "API rate limits")
+          (action . "Largest files first (fewer calls per GB)")
+          (result . "API overhead minimized")))
+       (step-4
+         ((constraint . "Physical network bandwidth")
+          (action . "Nothing more to do")
+          (result . "Theoretical maximum achieved")))))
+
+    (subordination-rules
+      ((listing . "RUN AHEAD - enumerate before upload starts")
+       (download . "PULL AHEAD - maintain 2-10GB buffer")
+       (transform . "BATCH DURING IDLE - compress during upload waits")
+       (upload . "THE KING - never starve, track quota precisely")))
+
+    (throughput-projections
+      ((single-sa . ((quota . "750GB/day") (rate . "8.7 MB/s") (5tb-time . "7 days")))
+       (4-sa . ((quota . "3TB/day") (rate . "34.7 MB/s") (5tb-time . "2 days")))
+       (10-sa . ((quota . "7.5TB/day") (rate . "86.8 MB/s") (5tb-time . "17 hours")))
+       (network-limited . ((observed . "173 MB/s") (5tb-time . "8 hours")))))))
+
+;;;============================================================================
+;;; NEW MODULES (v1.1.0-dev)
+;;;============================================================================
+
+(define new-modules
+  '((credential-pool
+      ((file . "apps/laminar_web/lib/laminar/credential_pool.ex")
+       (purpose . "Multi-SA quota management and rotation")
+       (features
+         ("Bulk import from folder"
+          "Per-SA daily quota tracking"
+          "Automatic rotation on exhaustion"
+          "Daily reset (midnight Pacific for GDrive)"
+          "Cost warnings for multi-SA mode"
+          "CLI: laminar credentials import/status/quota"))))
+
+    (parallel-transfer
+      ((file . "apps/laminar_web/lib/laminar/parallel_transfer.ex")
+       (purpose . "TOC-optimized parallel transfer coordinator")
+       (features
+         ("Enumerate-first: full manifest before transfer"
+          "Largest-first: minimize API calls per GB"
+          "One worker per SA: parallel quota consumption"
+          "Pipelined: workers operate independently"
+          "Pause/resume/abort controls"
+          "CLI: laminar parallel start/status/pause/resume/abort"))))
+
+    (toc-analysis-doc
+      ((file . "docs/TOC-ANALYSIS.md")
+       (purpose . "Theory of Constraints documentation")
+       (content
+         ("Constraint migration path diagrams"
+          "Subordination rules"
+          "Throughput projections"
+          "ASCII process flow diagrams"))))))
+
+;;;============================================================================
+;;; CLI COMMANDS (NEW)
+;;;============================================================================
+
+(define cli-commands-new
+  '((credentials
+      ((import . "laminar credentials import <path>")
+       (status . "laminar credentials status")
+       (quota . "laminar credentials quota [provider]")
+       (add . "laminar credentials add <provider> <file>")))
+
+    (parallel
+      ((start . "laminar parallel start <src> <dst> [--workers N] [--dry-run]")
+       (status . "laminar parallel status")
+       (pause . "laminar parallel pause")
+       (resume . "laminar parallel resume")
+       (abort . "laminar parallel abort")))))
+
+;;;============================================================================
+;;; ROUTE TO v1.1 (UPDATED)
 ;;;============================================================================
 
 (define route-to-v1.1
-  '((goal . "Enhanced monitoring and transfer profiles")
-    (target-completion . "TBD - user to schedule")
-    (status . "planning")
+  '((goal . "Multi-SA parallel transfers with TOC optimization")
+    (target-completion . "2025-12-11")
+    (status . "in-progress")
 
     (milestones
-      ((m1-transfer-profiles
+      ((m0-parallel-transfer
+         ((description . "Multi-SA credential pool and TOC-optimized parallel transfer")
+          (status . "complete")
+          (tasks
+            ((credential-pool-genserver . "complete")
+             (quota-tracking . "complete")
+             (bulk-import . "complete")
+             (parallel-transfer-coordinator . "complete")
+             (largest-first-sorting . "complete")
+             (worker-per-sa . "complete")
+             (cli-commands . "complete")
+             (toc-analysis-doc . "complete")))))
+
+       (m1-transfer-profiles
          ((description . "Named configuration profiles for common transfer patterns")
           (status . "not-started")
           (tasks
@@ -175,32 +295,29 @@
           (planned-for . "v1.2-plugin-architecture")))))))
 
 ;;;============================================================================
-;;; QUESTIONS FOR USER
+;;; REMAINING OPTIMIZATIONS
 ;;;============================================================================
 
-(define questions-for-user
-  '((strategic
-      ((q1 . "What is your primary use case? (personal media, enterprise backup, development artifacts, archival)")
-       (q2 . "Which cloud providers are highest priority for testing? (currently supports 40+ via Rclone)")
-       (q3 . "Is distributed/multi-instance deployment a near-term requirement?")
-       (q4 . "What is your target deployment environment? (bare metal, Kubernetes, cloud VMs)")))
+(define remaining-optimizations
+  '((dropbox-direct-links
+      ((description . "Use Dropbox direct download links for files <20MB")
+       (benefit . "Bypass some API rate limiting")
+       (status . "not-started")))
 
-    (technical
-      ((q5 . "Should v1.1 prioritize Prometheus metrics or web dashboard first?")
-       (q6 . "Preferred web dashboard framework? (React, Svelte, LiveView, or headless API-only)")
-       (q7 . "Transfer history storage preference? (SQLite for persistence vs ETS for performance)")
-       (q8 . "Should intelligence rules become runtime-configurable before plugin architecture?")))
+    (server-side-copy
+      ((description . "Use server-side copy when source and dest are same provider")
+       (benefit . "Zero bandwidth, instant transfer")
+       (status . "not-started")))
 
-    (operational
-      ((q9 . "Do you have existing Prometheus/Grafana infrastructure to integrate with?")
-       (q10 . "Are there compliance requirements affecting data handling? (GDPR, HIPAA, SOC2)")
-       (q11 . "Expected transfer volumes? (files/day, GB/day) for capacity planning")
-       (q12 . "Preferred CI/CD platform for releases? (GitHub Actions configured, others possible)")))
+    (checksum-sampling
+      ((description . "Verify 1% of files instead of 100%")
+       (benefit . "Faster verification, statistical confidence")
+       (status . "not-started")))
 
-    (community
-      ((q13 . "Is this intended for public open-source release or internal/private use?")
-       (q14 . "Should documentation be expanded for contributor onboarding?")
-       (q15 . "Interest in publishing to package managers? (Hex.pm, container registries)")))))
+    (resume-checkpoint
+      ((description . "Explicit checkpoint/resume with manifest persistence")
+       (benefit . "Resume after crashes without re-enumerating")
+       (status . "not-started")))))
 
 ;;;============================================================================
 ;;; LONG-TERM ROADMAP
@@ -219,15 +336,16 @@
                 "Container infrastructure"
                 "Comprehensive documentation"))))
 
-    (v1.1 . ((status . "planned")
-             (theme . "Observability & Profiles")
+    (v1.1 . ((status . "in-progress")
+             (theme . "Parallel Transfer & Observability")
              (features
-               ("Transfer profiles (named configurations)"
+               ("Multi-SA credential pool"
+                "TOC-optimized parallel transfer"
+                "750GB/day quota tracking per SA"
+                "Largest-first file ordering"
+                "Transfer profiles (named configurations)"
                 "Prometheus metrics export"
-                "Grafana dashboard templates"
-                "Transfer history persistence"
-                "Web dashboard (basic)"
-                "Real-time transfer visualization"))))
+                "Transfer history persistence"))))
 
     (v1.2 . ((status . "planned")
              (theme . "Extensibility & Scale")
@@ -251,15 +369,7 @@
                 "Audit logging"
                 "LDAP/SAML authentication"
                 "RBAC permissions"
-                "Multi-tenant support"))))
-
-    (considered . ((status . "no-timeline")
-                   (features
-                     ("IPFS integration"
-                      "Blockchain transfer verification"
-                      "Mobile apps (iOS/Android)"
-                      "Desktop apps (Electron/Tauri)"
-                      "S3-compatible API facade"))))))
+                "Multi-tenant support"))))))
 
 ;;;============================================================================
 ;;; TECHNOLOGY STACK
@@ -299,12 +409,12 @@
 
 (define next-actions
   '((immediate
-      ((action-1 . "User to answer strategic questions for v1.1 prioritization")
-       (action-2 . "Decide on transfer history storage mechanism")
-       (action-3 . "Choose web dashboard framework or defer to API-only")))
+      ((action-1 . "Test multi-SA parallel transfer with real Dropbox->GDrive migration")
+       (action-2 . "Create 4 GCP projects with service accounts for testing")
+       (action-3 . "Benchmark: compare single-SA vs 4-SA throughput")))
 
     (short-term
-      ((action-4 . "Implement transfer profiles schema and CLI integration")
+      ((action-4 . "Implement remaining optimizations (direct links, server-side copy)")
        (action-5 . "Add Prometheus telemetry exporter")
        (action-6 . "Create initial Grafana dashboard JSON")))
 
@@ -318,11 +428,20 @@
 ;;;============================================================================
 
 (define session-notes
-  '((session-id . "2025-12-08-initial-state")
-    (summary . "Created initial STATE.scm capturing project status post-v1.0 release")
-    (decisions . ())
-    (blockers . ("Awaiting user input on v1.1 priorities"))
-    (next-session-focus . "Review questions, prioritize v1.1 features, begin implementation")))
+  '((session-id . "2025-12-11-parallel-transfer")
+    (summary . "Implemented multi-SA credential pool and TOC-optimized parallel transfer")
+    (decisions
+      (("Multi-SA is explicitly supported by Google for bulk migrations"
+        "Each GCP project has independent quotas"
+        "Largest-first ordering minimizes API overhead")))
+    (blockers . ())
+    (implemented
+      ("CredentialPool GenServer"
+       "ParallelTransfer coordinator"
+       "CLI commands: credentials, parallel"
+       "TOC analysis documentation"
+       "Supervision tree integration"))
+    (next-session-focus . "Test with real migration, benchmark multi-SA throughput")))
 
 ;;;============================================================================
 ;;; QUERIES (minikanren-style helpers)
@@ -344,5 +463,8 @@
 
 (define (get-next-milestone)
   (car (assoc 'milestones route-to-v1.1)))
+
+(define (get-toc-constraint)
+  (car (assoc 'constraint-migration-path toc-analysis)))
 
 ;;; EOF
