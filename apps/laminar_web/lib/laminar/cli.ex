@@ -42,6 +42,8 @@ defmodule Laminar.CLI do
       config            Manage configuration
       profile           Manage transfer profiles
       job               Manage transfer jobs
+      credentials       Manage service account credentials
+      parallel          TOC-optimized parallel transfer
       stats             Show transfer statistics
       health            Check system health
       version           Show version information
@@ -282,6 +284,8 @@ defmodule Laminar.CLI do
       "config" -> cmd_config(args, global_opts)
       "profile" -> cmd_profile(args, global_opts)
       "job" -> cmd_job(args, global_opts)
+      "credentials" -> cmd_credentials(args, global_opts)
+      "parallel" -> cmd_parallel(args, global_opts)
 
       # Status
       "stats" -> cmd_stats(args, global_opts)
@@ -1025,6 +1029,408 @@ defmodule Laminar.CLI do
     end
 
     unless all_ok, do: System.halt(1)
+  end
+
+  # ---------------------------------------------------------------------------
+  # CREDENTIALS COMMAND
+  # ---------------------------------------------------------------------------
+
+  defp cmd_credentials(args, global_opts) do
+    case args do
+      ["import", path] -> do_credentials_import(path, global_opts)
+      ["status"] -> do_credentials_status(global_opts)
+      ["status" | _] -> do_credentials_status(global_opts)
+      ["add", provider, path] -> do_credentials_add(provider, path, global_opts)
+      ["quota"] -> do_credentials_quota(global_opts)
+      ["quota", provider] -> do_credentials_quota_provider(provider, global_opts)
+      [] -> do_credentials_status(global_opts)
+      _ -> print_credentials_help()
+    end
+  end
+
+  defp do_credentials_import(path, opts) do
+    info(opts, "Importing credentials from #{path}")
+
+    case Laminar.CredentialPool.import_folder(path) do
+      {:ok, count} ->
+        IO.puts("Imported #{count} credential(s)")
+        if count > 0 do
+          do_credentials_status(opts)
+        end
+
+      {:error, :not_a_directory} ->
+        error("Not a directory: #{path}")
+        System.halt(1)
+
+      {:error, reason} ->
+        error("Failed to import: #{inspect(reason)}")
+        System.halt(1)
+    end
+  end
+
+  defp do_credentials_status(opts) do
+    status = Laminar.CredentialPool.status()
+
+    if opts[:json] do
+      IO.puts(Jason.encode!(status, pretty: true))
+    else
+      IO.puts("Credential Pool Status")
+      IO.puts("=" |> String.duplicate(60))
+      IO.puts("")
+
+      if status.credentials == %{} or Enum.all?(status.credentials, fn {_, v} -> v == [] end) do
+        IO.puts("No credentials configured.")
+        IO.puts("")
+        IO.puts("Add service accounts with:")
+        IO.puts("  laminar credentials import /path/to/service-accounts/")
+      else
+        Enum.each(status.credentials, fn {provider, creds} ->
+          IO.puts("Provider: #{provider}")
+          IO.puts("-" |> String.duplicate(40))
+
+          if creds == [] do
+            IO.puts("  (no credentials)")
+          else
+            Enum.each(creds, fn cred ->
+              remaining = format_bytes_safe(cred.remaining)
+              used = format_bytes_safe(cred.used_today)
+              limit = format_bytes_safe(cred.daily_limit)
+              bar = progress_bar(cred.utilization, 20)
+
+              IO.puts("  #{cred.name}")
+              IO.puts("    Quota:    #{used} / #{limit} (#{remaining} remaining)")
+              IO.puts("    Progress: #{bar} #{Float.round(cred.utilization, 1)}%")
+            end)
+          end
+
+          IO.puts("")
+        end)
+
+        # Show aggregate quota
+        Enum.each(status.credentials, fn {provider, creds} ->
+          if length(creds) > 0 do
+            total_remaining = Laminar.CredentialPool.total_remaining(provider)
+            reset_seconds = Laminar.CredentialPool.time_until_reset(provider)
+            reset_hours = Float.round(reset_seconds / 3600, 1)
+
+            IO.puts("Aggregate for #{provider}:")
+            IO.puts("  Total remaining today: #{format_bytes_safe(total_remaining)}")
+            IO.puts("  Quota resets in:       #{reset_hours} hours")
+            IO.puts("")
+          end
+        end)
+      end
+    end
+  end
+
+  defp do_credentials_add(provider, path, opts) do
+    case File.read(path) do
+      {:ok, content} ->
+        case Jason.decode(content) do
+          {:ok, data} ->
+            case Laminar.CredentialPool.add_credential(provider, data, path: path) do
+              {:ok, id} ->
+                info(opts, "Added credential: #{id}")
+
+              {:error, reason} ->
+                error("Failed to add credential: #{inspect(reason)}")
+                System.halt(1)
+            end
+
+          {:error, reason} ->
+            error("Invalid JSON: #{inspect(reason)}")
+            System.halt(1)
+        end
+
+      {:error, reason} ->
+        error("Cannot read file: #{inspect(reason)}")
+        System.halt(1)
+    end
+  end
+
+  defp do_credentials_quota(opts) do
+    status = Laminar.CredentialPool.status()
+
+    IO.puts("Daily Quota Summary")
+    IO.puts("=" |> String.duplicate(60))
+    IO.puts("")
+
+    Enum.each(status.credentials, fn {provider, creds} ->
+      if length(creds) > 0 do
+        total_remaining = Laminar.CredentialPool.total_remaining(provider)
+        cred_count = length(creds)
+        per_sa_limit = 750 * 1024 * 1024 * 1024
+
+        IO.puts("#{provider}:")
+        IO.puts("  Service accounts:  #{cred_count}")
+        IO.puts("  Per-SA limit:      #{format_bytes_safe(per_sa_limit)}/day")
+        IO.puts("  Aggregate limit:   #{format_bytes_safe(per_sa_limit * cred_count)}/day")
+        IO.puts("  Remaining today:   #{format_bytes_safe(total_remaining)}")
+        IO.puts("")
+      end
+    end)
+
+    # Show cost warning if configured for multi-SA
+    total_sas = Enum.sum(Enum.map(status.credentials, fn {_, v} -> length(v) end))
+    if total_sas > 1 do
+      IO.puts("Multi-SA Mode Active")
+      IO.puts("-" |> String.duplicate(40))
+      IO.puts("Using #{total_sas} service accounts for parallel quota.")
+      IO.puts("Each SA uses API quota from its GCP project (usually free tier).")
+      IO.puts("Storage quota is NOT multiplied - all SAs write to same destination.")
+    end
+  end
+
+  defp do_credentials_quota_provider(provider, opts) do
+    remaining = Laminar.CredentialPool.total_remaining(provider)
+    reset_seconds = Laminar.CredentialPool.time_until_reset(provider)
+
+    if opts[:json] do
+      IO.puts(Jason.encode!(%{
+        provider: provider,
+        remaining_bytes: remaining,
+        reset_in_seconds: reset_seconds
+      }, pretty: true))
+    else
+      IO.puts("#{provider} quota: #{format_bytes_safe(remaining)} remaining")
+      IO.puts("Resets in: #{Float.round(reset_seconds / 3600, 1)} hours")
+    end
+  end
+
+  defp print_credentials_help do
+    IO.puts("""
+    Usage: laminar credentials <subcommand> [options]
+
+    Manage service account credentials for multi-SA parallel transfers.
+
+    SUBCOMMANDS:
+        import <path>         Import all .json service accounts from directory
+        add <provider> <file> Add single credential file
+        status                Show credential pool status and quotas
+        quota [provider]      Show remaining daily quota
+
+    EXAMPLES:
+        # Import all service accounts from a folder
+        laminar credentials import ~/.config/laminar/credentials/
+
+        # Check quota status
+        laminar credentials status
+
+        # Add a single Google service account
+        laminar credentials add gdrive ~/my-sa.json
+
+    WHY MULTIPLE SERVICE ACCOUNTS?
+
+    Google Drive has a 750GB/day upload limit PER SERVICE ACCOUNT.
+    Using N service accounts gives you N × 750GB/day throughput.
+
+    This is EXPLICITLY SUPPORTED by Google for bulk migrations:
+    - Each GCP project has independent quotas
+    - Service account rotation is a documented pattern
+    - API costs per project (usually free tier for Drive API)
+
+    COST WARNING:
+    Multiple SAs means API calls are distributed across GCP projects.
+    Drive API is free tier for normal usage. Storage quota is NOT
+    multiplied - all SAs write to the SAME destination account.
+    """)
+  end
+
+  defp progress_bar(percent, width) do
+    filled = round(percent / 100 * width)
+    empty = width - filled
+    "[" <> String.duplicate("█", filled) <> String.duplicate("░", empty) <> "]"
+  end
+
+  defp format_bytes_safe(:unlimited), do: "unlimited"
+  defp format_bytes_safe(bytes) when is_integer(bytes), do: format_bytes(bytes)
+  defp format_bytes_safe(_), do: "unknown"
+
+  # ---------------------------------------------------------------------------
+  # PARALLEL TRANSFER COMMAND
+  # ---------------------------------------------------------------------------
+
+  defp cmd_parallel(args, global_opts) do
+    case args do
+      ["start", source, dest | rest] ->
+        {opts, _, _} = OptionParser.parse(rest, strict: [
+          workers: :integer,
+          dry_run: :boolean,
+          verify: :boolean,
+          enumerate_first: :boolean,
+          largest_first: :boolean
+        ])
+        do_parallel_start(source, dest, Keyword.merge(global_opts, opts))
+
+      ["status"] -> do_parallel_status(global_opts)
+      ["pause"] -> do_parallel_pause(global_opts)
+      ["resume"] -> do_parallel_resume(global_opts)
+      ["abort"] -> do_parallel_abort(global_opts)
+      [] -> do_parallel_status(global_opts)
+      _ -> print_parallel_help()
+    end
+  end
+
+  defp do_parallel_start(source, dest, opts) do
+    info(opts, "Starting parallel transfer: #{source} -> #{dest}")
+
+    # Show cost warning before starting
+    if warning = Laminar.CredentialPool.cost_warning(extract_provider(dest), 0) do
+      IO.puts(warning)
+      IO.puts("")
+    end
+
+    transfer_opts = [
+      enumerate_first: Keyword.get(opts, :enumerate_first, true),
+      largest_first: Keyword.get(opts, :largest_first, true),
+      workers: Keyword.get(opts, :workers),
+      dry_run: Keyword.get(opts, :dry_run, false),
+      verify: Keyword.get(opts, :verify, false)
+    ]
+
+    case Laminar.ParallelTransfer.start(source, dest, transfer_opts) do
+      {:ok, job_id} ->
+        IO.puts("Transfer started: #{job_id}")
+        IO.puts("")
+        IO.puts("Monitor with:  laminar parallel status")
+        IO.puts("Pause with:    laminar parallel pause")
+        IO.puts("Abort with:    laminar parallel abort")
+
+      {:error, :transfer_in_progress} ->
+        error("A transfer is already in progress. Use 'laminar parallel abort' first.")
+        System.halt(1)
+
+      {:error, reason} ->
+        error("Failed to start transfer: #{inspect(reason)}")
+        System.halt(1)
+    end
+  end
+
+  defp do_parallel_status(opts) do
+    status = Laminar.ParallelTransfer.status()
+
+    if opts[:json] do
+      IO.puts(Jason.encode!(status, pretty: true))
+    else
+      IO.puts("Parallel Transfer Status")
+      IO.puts("=" |> String.duplicate(60))
+      IO.puts("")
+
+      if status.status == :idle do
+        IO.puts("No active transfer.")
+        IO.puts("")
+        IO.puts("Start with: laminar parallel start <source> <destination>")
+      else
+        IO.puts("Job ID:          #{status.id}")
+        IO.puts("Status:          #{status.status}")
+        IO.puts("Source:          #{status.source}")
+        IO.puts("Destination:     #{status.destination}")
+        IO.puts("")
+        IO.puts("Progress:        #{progress_bar(status.progress_percent, 30)} #{status.progress_percent}%")
+        IO.puts("Files:           #{status.completed_files} / #{status.total_files} completed")
+        IO.puts("                 #{status.failed_files} failed, #{status.queued_files} queued")
+        IO.puts("")
+        IO.puts("Data:            #{format_bytes(status.transferred_bytes)} / #{format_bytes(status.total_bytes)}")
+        IO.puts("Throughput:      #{status.throughput_mbps} MB/s")
+        IO.puts("Elapsed:         #{format_duration(status.elapsed_seconds)}")
+        IO.puts("Active workers:  #{status.active_workers}")
+
+        if status.total_bytes > 0 and status.throughput_mbps > 0 do
+          remaining_bytes = status.total_bytes - status.transferred_bytes
+          eta_seconds = remaining_bytes / (status.throughput_mbps * 1_000_000)
+          IO.puts("ETA:             #{format_duration(round(eta_seconds))}")
+        end
+      end
+    end
+  end
+
+  defp do_parallel_pause(opts) do
+    case Laminar.ParallelTransfer.pause() do
+      :ok ->
+        info(opts, "Transfer paused")
+
+      {:error, reason} ->
+        error("Failed to pause: #{inspect(reason)}")
+    end
+  end
+
+  defp do_parallel_resume(opts) do
+    case Laminar.ParallelTransfer.resume() do
+      :ok ->
+        info(opts, "Transfer resumed")
+
+      {:error, reason} ->
+        error("Failed to resume: #{inspect(reason)}")
+    end
+  end
+
+  defp do_parallel_abort(opts) do
+    case Laminar.ParallelTransfer.abort() do
+      :ok ->
+        info(opts, "Transfer aborted")
+
+      {:error, reason} ->
+        error("Failed to abort: #{inspect(reason)}")
+    end
+  end
+
+  defp print_parallel_help do
+    IO.puts("""
+    Usage: laminar parallel <subcommand> [options]
+
+    TOC-optimized parallel transfer with multi-SA credential rotation.
+
+    SUBCOMMANDS:
+        start <src> <dst>   Start parallel transfer
+        status              Show transfer progress
+        pause               Pause transfer
+        resume              Resume paused transfer
+        abort               Abort transfer
+
+    OPTIONS (for start):
+        --workers <n>       Number of parallel workers (default: one per SA)
+        --dry-run           Enumerate files without transferring
+        --verify            Verify checksums after transfer
+        --enumerate-first   List all files before starting (default: true)
+        --largest-first     Process largest files first (default: true)
+
+    EXAMPLES:
+        # Start optimized transfer from Dropbox to Google Drive
+        laminar parallel start dropbox: gdrive:backup
+
+        # With 4 workers and verification
+        laminar parallel start --workers 4 --verify s3:source b2:dest
+
+        # Dry run to see what would be transferred
+        laminar parallel start --dry-run dropbox:photos gdrive:photos
+
+    THEORY OF CONSTRAINTS OPTIMIZATION:
+
+    This command implements TOC principles for maximum throughput:
+    1. ENUMERATE FIRST: Build complete manifest before transfer
+    2. LARGEST FIRST:   Big files = fewer API calls per GB
+    3. MULTI-SA:        Each SA adds 750GB/day quota
+    4. PIPELINED:       Workers operate independently
+
+    With 4 service accounts: 3TB/day throughput (vs 750GB with single SA)
+    """)
+  end
+
+  defp extract_provider(remote) do
+    case String.split(remote, ":", parts: 2) do
+      [provider | _] -> provider
+      _ -> "unknown"
+    end
+  end
+
+  defp format_duration(seconds) when seconds < 60, do: "#{seconds}s"
+  defp format_duration(seconds) when seconds < 3600 do
+    "#{div(seconds, 60)}m #{rem(seconds, 60)}s"
+  end
+  defp format_duration(seconds) do
+    hours = div(seconds, 3600)
+    mins = div(rem(seconds, 3600), 60)
+    "#{hours}h #{mins}m"
   end
 
   # ===========================================================================
