@@ -216,6 +216,45 @@ defmodule Laminar.RcloneClient do
   end
 
   @doc """
+  Get total size and count of files at remote path.
+  """
+  def size(remote, opts \\ []) do
+    params = %{fs: remote}
+    params = if opts[:filters], do: Map.put(params, :filter, opts[:filters]), else: params
+
+    rpc("operations/size", params)
+  end
+
+  @doc """
+  Check files at source against destination (verify hashes match).
+  """
+  def check(source, destination, opts \\ []) do
+    rpc("sync/check", %{
+      srcFs: source,
+      dstFs: destination,
+      opt: %{
+        downloadHash: opts[:download_hash] || false
+      }
+    })
+  end
+
+  @doc """
+  Execute a generic rclone command via CLI.
+  For operations not exposed via RC API.
+  """
+  def execute(command, args) when is_list(args) do
+    rclone_path = System.find_executable("rclone") || "/usr/bin/rclone"
+
+    case System.cmd(rclone_path, [command | args], stderr_to_stdout: true) do
+      {output, 0} ->
+        {:ok, output}
+
+      {output, code} ->
+        {:error, {:exit_code, code, output}}
+    end
+  end
+
+  @doc """
   List files in a remote directory (JSON format).
   """
   def lsjson(remote, opts \\ []) do

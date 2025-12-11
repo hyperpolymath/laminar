@@ -19,6 +19,12 @@ defmodule LaminarWeb.Application do
       {Laminar.CredentialPool, credentials_path: credentials_path()},
       # Start the Parallel Transfer coordinator
       Laminar.ParallelTransfer,
+      # Start transfer metrics tracking
+      Laminar.TransferMetrics,
+      # Start live transfer management
+      Laminar.LiveTransfer,
+      # Start report submission to feedback-a-tron
+      Laminar.ReportSubmitter,
       # Start the Endpoint
       LaminarWeb.Endpoint
     ]
