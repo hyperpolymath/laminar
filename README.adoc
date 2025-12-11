@@ -1,133 +1,76 @@
-// SPDX-License-Identifier: Apache-2.0
-// SPDX-FileCopyrightText: 2025 Laminar Contributors
-
-= Laminar: High-Velocity Cloud Streaming Relay
-:toc: left
-:toclevels: 3
+= laminar
+Jonathan D.A. Jewell <jonathan.jewell@gmail.com>
+:toc: macro
 :icons: font
 :source-highlighter: rouge
+:experimental:
+:url-github: https://github.com/hyperpolymath/laminar
+:url-gitlab: https://gitlab.com/hyperpolymath/laminar
+:url-bitbucket: https://bitbucket.org/hyperpolymath/laminar
+:url-codeberg: https://codeberg.org/hyperpolymath/laminar
+
+Laminar flow orchestration for data pipelines
+
+image:https://img.shields.io/badge/RSR-Certified-gold[RSR Certified]
+image:https://img.shields.io/badge/License-AGPL%20v3-blue[License]
+
+toc::[]
 
 == Overview
 
-Laminar is a high-speed, cloud-to-cloud streaming relay that transfers data between cloud storage providers (Dropbox, Google Drive, S3, etc.) without downloading files to local persistent storage. Data flows through RAM buffers in parallel "laminar" streams, achieving maximum throughput while maintaining cryptographic integrity.
+laminar is part of the link:https://rhodium.sh[Rhodium Standard] (RSR) ecosystem.
 
-=== Why "Laminar"?
+Domain: *software-development*
 
-In fluid dynamics, *laminar flow* occurs when a fluid flows in parallel layers with no disruption between them. This perfectly describes our architecture: parallel data streams flowing smoothly from source to destination without turbulence (thrashing, random writes, or disk I/O bottlenecks).
-
-== Architecture
-
-[source]
-----
-┌─────────────┐     ┌──────────────────────────────────────┐     ┌─────────────┐
-│   Dropbox   │────▶│          LAMINAR RELAY               │────▶│Google Drive │
-│   (Source)  │     │  ┌─────────┐  ┌─────────────────┐   │     │   (Dest)    │
-└─────────────┘     │  │ RAM     │  │ Elixir Control  │   │     └─────────────┘
-                    │  │ Buffer  │──│ Plane (GraphQL) │   │
-                    │  │ (Tier1) │  └─────────────────┘   │
-                    │  └─────────┘           │            │
-                    │       │                │            │
-                    │  ┌─────────┐  ┌─────────────────┐   │
-                    │  │ NVMe    │  │ Rclone Engine   │   │
-                    │  │ Stage   │──│ (Data Plane)    │   │
-                    │  │ (Tier2) │  └─────────────────┘   │
-                    │  └─────────┘                        │
-                    └──────────────────────────────────────┘
-----
-
-=== Key Components
-
-* **Control Plane**: Elixir + Phoenix + Absinthe (GraphQL API)
-* **Data Plane**: Rclone with optimized parallel streaming
-* **Storage Tiers**: RAM (Tier 1) + NVMe (Tier 2) volatile caching
-* **Container Runtime**: Podman with Chainguard Wolfi base
-* **Network Physics**: TCP BBR, GRO enabled, LRO disabled
-
-== Features
-
-=== Core Capabilities
-
-* **Zero Persistence**: Data never touches permanent storage
-* **Parallel Streaming**: 32+ concurrent transfers with multi-thread streams
-* **Content-Aware Routing**: Text → compression, media → passthrough
-* **Ghost Links**: Create URL stubs for massive files instead of transferring
-* **Refinery Pipeline**: Convert formats on-the-fly (WAV→FLAC, BMP→WebP)
-* **Intelligent Filtering**: Auto-exclude `node_modules/`, build artifacts, OS junk
-
-=== Network Optimizations
-
-* **TCP BBR**: Bottleneck Bandwidth and Round-trip propagation time
-* **eDNS Client Subnet**: Route to nearest CDN edge
-* **Buffer Tuning**: 16MB TCP buffers for high BDP paths
-* **Coalescence**: GRO enabled, LRO disabled for container safety
-
-== Quick Start
+== Installation
 
 [source,bash]
 ----
-# 1. Initialize environment (requires root)
-sudo ./scripts/install.osh
+# Clone from GitHub (primary)
+git clone {url-github}
 
-# 2. Tune network physics
-just tune-network
-
-# 3. Build the refinery container
-just build-all
-
-# 4. Configure your remotes (interactive)
-just setup-remotes
-
-# 5. Start the relay
-just up
-
-# 6. Start the control plane
-just start-brain
+# Or from mirrors
+git clone {url-gitlab}
+git clone {url-codeberg}
 ----
 
-== Usage
+== RSR Stack
 
-=== GraphQL API
+This project follows RSR conventions:
 
-[source,graphql]
-----
-mutation {
-  startLaminarStream(
-    source: "dropbox:/Photos"
-    destination: "gdrive:/Backup/Photos"
-    parallelism: 32
-    swarmStreams: 8
-    bufferSize: "128M"
-  ) {
-    id
-    status
-    speed
-    percentage
-  }
-}
-----
+* ✅ ReScript for frontend/logic
+* ✅ Deno for JS runtime
+* ✅ WASM for performance-critical code
+* ✅ Rust/OCaml/Haskell for systems/proofs
+* ✅ Guile/Scheme for configuration
+* ❌ No TypeScript
+* ❌ No Go
+* ❌ No npm
 
-=== Direct CLI
+== Mirrors
 
-[source,bash]
-----
-# Quick transfer
-just stream dropbox:Source gdrive:Dest
+[cols="1,2"]
+|===
+| Platform | URL
 
-# Smart transfer with filtering
-just smart-stream dropbox:Projects gdrive:Backup
-----
-
-== Configuration
-
-See `config/config.json` for runtime configuration and `config/filters.txt` for exclusion rules.
-
-== Documentation
-
-* link:cookbook.adoc[Cookbook] - Detailed recipes and tuning guides
-* link:CLAUDE.adoc[AI Assistant Guide] - For AI-assisted development
-* link:SECURITY.adoc[Security] - Security policies and practices
-* link:CONTRIBUTING.adoc[Contributing] - How to contribute
+| GitHub (primary) | {url-github}
+| GitLab | {url-gitlab}
+| Bitbucket | {url-bitbucket}
+| Codeberg | {url-codeberg}
+|===
 
 == License
 
-Apache-2.0. See link:LICENSE.txt[LICENSE.txt] for details.
+Licensed under AGPL-3.0-or-later OR LicenseRef-Palimpsest-0.5.
+
+See link:LICENSE[LICENSE] for details.
+
+== Contributing
+
+See link:CONTRIBUTING.adoc[CONTRIBUTING.adoc].
+
+== Metadata
+
+* Domain: software-development
+* Framework: RSR (Rhodium Standard Repository)
+* Dublin Core: link:.well-known/dc.xml[.well-known/dc.xml]
