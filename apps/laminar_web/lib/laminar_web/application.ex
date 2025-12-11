@@ -15,6 +15,10 @@ defmodule LaminarWeb.Application do
       {Phoenix.PubSub, name: LaminarWeb.PubSub},
       # Start Finch HTTP client for Rclone RC API
       {Finch, name: LaminarWeb.Finch},
+      # Start the Credential Pool for multi-SA quota management
+      {Laminar.CredentialPool, credentials_path: credentials_path()},
+      # Start the Parallel Transfer coordinator
+      Laminar.ParallelTransfer,
       # Start the Endpoint
       LaminarWeb.Endpoint
     ]
@@ -27,5 +31,20 @@ defmodule LaminarWeb.Application do
   def config_change(changed, _new, removed) do
     LaminarWeb.Endpoint.config_change(changed, removed)
     :ok
+  end
+
+  defp credentials_path do
+    # Check for credentials in standard locations
+    paths = [
+      System.get_env("LAMINAR_CREDENTIALS_PATH"),
+      Path.expand("~/.config/laminar/credentials"),
+      "/etc/laminar/credentials",
+      "/secrets/credentials"
+    ]
+
+    Enum.find(paths, fn
+      nil -> false
+      path -> File.dir?(path)
+    end)
   end
 end
