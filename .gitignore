@@ -1,40 +1,79 @@
-# SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2025 Laminar Contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# RSR-compliant .gitignore
 
-# Elixir/Mix
-/_build/
-/deps/
-*.ez
-*.beam
-.elixir_ls/
-
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Rclone secrets
-config/rclone/rclone.conf
-
-# Caches
-.cache/
-__pycache__/
-*.pyc
-
-# IDE
-.idea/
-.vscode/
-*.sublime-*
-
-# OS
+# OS & Editor
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
 *~
+.idea/
+.vscode/
 
-# Temporary
-*.tmp
-*.log
-*.bak
+# Build
+/target/
+/_build/
+/build/
+/dist/
+/out/
 
-# Test artifacts
+# Dependencies
+/node_modules/
+/vendor/
+/deps/
+/.elixir_ls/
+
+# Rust
+# Cargo.lock  # Keep for binaries
+
+# Elixir
 /cover/
+/doc/
+*.ez
+erl_crash.dump
+
+# Julia
+*.jl.cov
+*.jl.mem
+/Manifest.toml
+
+# ReScript
+/lib/bs/
+/.bsb.lock
+
+# Python (SaltStack only)
+__pycache__/
+*.py[cod]
+.venv/
+
+# Ada/SPARK
+*.ali
+/obj/
+/bin/
+
+# Haskell
+/.stack-work/
+/dist-newstyle/
+
+# Chapel
+*.chpl.tmp.*
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# Test/Coverage
+/coverage/
+htmlcov/
+
+# Logs
+*.log
+/logs/
+
+# Temp
+/tmp/
+*.tmp
+*.bak
