@@ -1,10 +1,76 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2025 Laminar Contributors
 
 = Roadmap
 :toc:
+:sectnums:
 
 This document outlines planned features and improvements for Laminar.
+Last updated: 2025-12-17
+
+== Current Phase: v0.1 (Foundation)
+
+=== Completed
+- [x] RSR (Rhodium Standard Repository) compliance foundation
+- [x] Multi-platform CI/CD (GitHub, GitLab, Bitbucket)
+- [x] SHA-pinned GitHub Actions for security
+- [x] SPDX license headers on all files
+- [x] OSSF Scorecard integration
+- [x] CodeQL security scanning (when applicable)
+- [x] STATE.scm, META.scm, ECOSYSTEM.scm documentation
+
+=== In Progress
+- [ ] Guix package definition refinement
+- [ ] flake.nix for Nix users (fallback)
+- [ ] Containerfile for container deployments
+
+== Version 0.2 (Core Functionality)
+
+=== Streaming Engine
+- [ ] Implement primary cloud-to-cloud transfer features
+- [ ] Rclone RC API integration
+- [ ] Broadway pipeline for 4-lane processing (ghost/express/squeeze/refine)
+
+=== Testing
+- [ ] Add comprehensive ExUnit tests
+- [ ] Property-based testing where applicable
+- [ ] Integration tests for API boundaries
+- [ ] Target: 70% test coverage
+
+=== Documentation
+- [ ] API documentation (ExDoc)
+- [ ] Architecture decision records in META.scm
+- [ ] User guides
+
+== Version 0.5 (Feature Complete)
+
+=== Multi-SA Parallel Transfer (TOC-Optimized)
+- [ ] CredentialPool for multi-SA quota management
+- [ ] ParallelTransfer coordinator
+- [ ] Largest-first ordering (minimize API overhead)
+
+=== Intelligence Engine
+- [ ] File routing decision engine
+- [ ] Smart compression selection
+- [ ] File type classification
+
+=== CLI Polish
+- [ ] Full command-line interface
+- [ ] Transfer profiles
+- [ ] Progress visualization
+
+== Version 1.0 (Production Release)
+
+=== Stability
+- [ ] Comprehensive test coverage (>80%)
+- [ ] Performance optimization
+- [ ] Security audit completion
+- [ ] User documentation complete
+
+=== Production Features
+- [ ] RC API authentication
+- [ ] Checkpoint/resume with manifest persistence
+- [ ] Ghost linker for large files
 
 == Version 1.1 (Next)
 
