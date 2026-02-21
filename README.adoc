@@ -136,3 +136,8 @@ See `config/config.json` for runtime configuration and `config/filters.txt` for 
 == License
 
 Apache-2.0. See link:LICENSE.txt[LICENSE.txt] for details.
+
+
+== Architecture
+
+See link:TOPOLOGY.md[TOPOLOGY.md] for a visual architecture map and completion dashboard.
