@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: PMPL-1.0-or-later
+# Clade declaration — part of the gv-clade-index registry
+# See: https://github.com/hyperpolymath/gv-clade-index
+
+[identity]
+uuid = "769d09ef-e870-5e11-b1f5-f63b144da0a7"
+primary-forge = "github"
+primary-owner = "hyperpolymath"
+canonical-name = "laminar"
+prefixed-name = "ix-laminar"
+
+[clade]
+primary = "ix"
+secondary = []
+assigned = "2026-03-16"
+rationale = ""
+
+[forges]
+github = "hyperpolymath/laminar"
+gitlab = "hyperpolymath/laminar"
+bitbucket = "hyperpolymath/laminar"
+
+[lineage]
+type = "standalone"
+parent = "Laminar flow/pipeline tool"
+born = "2026-03-16"
