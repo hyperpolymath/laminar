@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: PMPL-1.0-or-later
+= Laminar: High-Velocity Cloud Streaming Relay — Show Me The Receipts
+:toc:
+:icons: font
+
+The README makes claims. This file backs them up.
+
+[quote, README]
+____
+Laminar is a high-speed, cloud-to-cloud streaming relay that transfers data between cloud storage providers (Dropbox, Google Drive, S3, etc.) without downloading files to local persistent storage. Data flows through RAM buffers in parallel "laminar" streams, achieving maximum throughput while maintaining cryptographic integrity.
+____
+
+== File Map
+
+[cols="1,2"]
+|===
+| Path | What's There
+
+| `test(s)/` | Test suite
+|===
+
+== Questions?
+
+Open an issue or reach out directly — happy to explain anything in more detail.
