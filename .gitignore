@@ -12,7 +12,7 @@ Thumbs.db
 
 # Build
 /target/
-/_build/
+_build/
 /build/
 /dist/
 /out/
@@ -20,8 +20,12 @@ Thumbs.db
 # Dependencies
 /node_modules/
 /vendor/
-/deps/
-/.elixir_ls/
+deps/
+.elixir_ls/
+
+# Elixir binaries & lockfiles
+apps/laminar_web/laminar
+mix.lock
 
 # Rust
 # Cargo.lock  # Keep for binaries

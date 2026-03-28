@@ -61,6 +61,7 @@ defmodule LaminarWeb.MixProject do
     [
       # Web Framework
       {:phoenix, "~> 1.7.10"},
+      {:phoenix_live_view, "~> 0.20"},
       {:bandit, "~> 1.2"},
       {:jason, "~> 1.4"},
       {:cors_plug, "~> 3.0"},
@@ -79,10 +80,11 @@ defmodule LaminarWeb.MixProject do
       {:gen_stage, "~> 1.2"},
 
       # Compression
-      {:zstd, "~> 0.3", optional: true},
+      
 
       # Utilities
       {:telemetry, "~> 1.2"},
+      {:telemetry_poller, "~> 1.0"},
       {:telemetry_metrics, "~> 0.6"},
 
       # Development & Testing

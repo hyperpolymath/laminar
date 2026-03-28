@@ -231,22 +231,31 @@ defmodule Laminar.CLI do
   """
   def main(args \\ []) do
     {global_opts, remaining, _invalid} =
-      OptionParser.parse(args, strict: @global_switches, aliases: @global_aliases)
+      OptionParser.parse(args, switches: @global_switches, aliases: @global_aliases)
 
-    cond do
-      global_opts[:version] ->
+    case remaining do
+      ["version" | _] ->
         print_version()
 
-      global_opts[:help] && remaining == [] ->
-        print_help()
+      ["help" | rest] ->
+        print_command_help(rest)
 
-      true ->
-        case remaining do
-          [] ->
+      _ when is_list(remaining) ->
+        cond do
+          global_opts[:version] ->
+            print_version()
+
+          global_opts[:help] && remaining == [] ->
             print_help()
 
-          [command | rest] ->
-            run_command(command, rest, global_opts)
+          true ->
+            case remaining do
+              [] ->
+                print_help()
+
+              [command | rest] ->
+                run_command(command, rest, global_opts)
+            end
         end
     end
   end

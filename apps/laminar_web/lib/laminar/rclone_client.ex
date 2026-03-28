@@ -151,6 +151,112 @@ defmodule Laminar.RcloneClient do
   end
 
   @doc """
+  High-level move command using CLI.
+  """
+  def move(src, dst, opts \\ %{}) do
+    args = ["move", src, dst | opts_to_flags(opts)]
+    execute("move", args)
+  end
+
+  @doc """
+  High-level sync command using CLI.
+  """
+  def sync(src, dst, opts \\ %{}) do
+    args = ["sync", src, dst | opts_to_flags(opts)]
+    execute("sync", args)
+  end
+
+  @doc """
+  High-level copy command using CLI.
+  """
+  def copy(src, dst, opts \\ %{}) do
+    args = ["copy", src, dst | opts_to_flags(opts)]
+    execute("copy", args)
+  end
+
+  defp opts_to_flags(opts) do
+    Enum.flat_map(opts, fn
+      {_k, nil} -> []
+      {_k, false} -> []
+      {k, true} -> ["--#{String.replace(to_string(k), "_", "-")}"]
+      {k, v} -> ["--#{String.replace(to_string(k), "_", "-")}", to_string(v)]
+    end)
+  end
+
+  @doc """
+  List files in a remote directory.
+  """
+  def list(remote, path) do
+    lsjson(remote, path: path)
+  end
+
+  @doc """
+  List configured remotes.
+  """
+  def list_remotes do
+    case execute("listremotes", []) do
+      {:ok, output} ->
+        remotes =
+          output
+          |> String.split("\n", trim: true)
+          |> Enum.map(&String.trim_trailing(&1, ":"))
+        {:ok, remotes}
+      error -> error
+    end
+  end
+
+  @doc """
+  Dump configuration.
+  """
+  def config_dump do
+    case execute("config", ["dump"]) do
+      {:ok, output} -> Jason.decode(output)
+      error -> error
+    end
+  end
+
+  @doc """
+  Get job list.
+  """
+  def job_list do
+    case rpc("job/list", %{}) do
+      {:ok, %{"jobids" => ids}} ->
+        jobs = Enum.map(ids, fn id -> %{"jobid" => id, "status" => "unknown", "group" => "unknown"} end)
+        {:ok, jobs}
+      {:ok, _} -> {:ok, []}
+      error -> error
+    end
+  end
+
+  @doc """
+  Stop a job.
+  """
+  def job_stop(job_id) do
+    rpc("job/stop", %{jobid: job_id})
+  end
+
+  @doc """
+  Stop all jobs.
+  """
+  def job_stop_all do
+    rpc("job/stopall", %{})
+  end
+
+  @doc """
+  Get job status.
+  """
+  def job_status(job_id) do
+    rpc("job/status", %{jobid: job_id})
+  end
+
+  @doc """
+  Get rclone version.
+  """
+  def version do
+    execute("version", [])
+  end
+
+  @doc """
   Copy a file within or between remotes.
   """
   def copy_file(src_remote, src_path, dst_remote, dst_path) do
