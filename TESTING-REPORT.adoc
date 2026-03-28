@@ -336,7 +336,7 @@ Before running tests, ensure:
 
 [source,bash]
 ----
-cd /var/home/hyper/repos/laminar/apps/laminar_web
+cd /var$HOME/repos/laminar/apps/laminar_web
 mix deps.get
 mix deps.compile
 ----
