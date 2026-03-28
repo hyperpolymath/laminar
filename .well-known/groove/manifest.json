@@ -1,0 +1,23 @@
+{
+  "groove_version": "1",
+  "service_id": "laminar",
+  "service_version": "0.1.0",
+  "capabilities": {
+    "workflow": {
+      "type": "workflow",
+      "description": "Pipeline orchestration and data flow management",
+      "protocol": "http",
+      "endpoint": "/api/pipelines",
+      "requires_auth": false,
+      "panel_compatible": true
+    }
+  },
+  "consumes": ["octad-storage", "scanning"],
+  "endpoints": {
+    "health": "/health",
+    "groove": "/.well-known/groove",
+    "graphql": "/graphql"
+  },
+  "health": "/health",
+  "applicability": ["individual", "team"]
+}
