@@ -1,24 +1,137 @@
 // SPDX-License-Identifier: PMPL-1.0-or-later
+// Copyright (c) 2025-2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 = Laminar: High-Velocity Cloud Streaming Relay — Show Me The Receipts
 :toc:
+:toclevels: 3
 :icons: font
 
-The README makes claims. This file backs them up.
+The README makes claims. This file backs them up with code paths, caveats, and honest gaps.
+
+== Claim 1: Zero-Persistence Relay — Data Never Touches Permanent Storage
 
 [quote, README]
 ____
 Laminar is a high-speed, cloud-to-cloud streaming relay that transfers data between cloud storage providers (Dropbox, Google Drive, S3, etc.) without downloading files to local persistent storage. Data flows through RAM buffers in parallel "laminar" streams, achieving maximum throughput while maintaining cryptographic integrity.
 ____
 
+*How it works:* The control plane (`apps/laminar_web/`) is an Elixir/Phoenix application using
+Absinthe for GraphQL. `LaminarWeb.Schema` defines `transfer_job` and `stream_config` types with
+real-time telemetry fields (speed, percentage, ETA). The data plane is Rclone, invoked through its
+RC (Remote Control) HTTP/JSON-RPC API from `apps/laminar_web/lib/laminar/rclone_client.ex`.
+Storage is staged in a tmpfs RAM buffer (Tier 1, 2 GB volatile) with NVMe checkpoint cache
+(Tier 2) for large-file resume. Because tmpfs lives in RAM and the NVMe stage is explicitly
+ephemeral, no data reaches the OS filesystem's durable layers during a normal transfer.
+
+*Honest caveat:* Zero-persistence is a runtime property enforced by mount configuration
+(`/etc/fstab` tmpfs entries in `scripts/install.osh`), not a code-level guarantee. If the relay
+is deployed on a machine where the tmpfs mount is missing, data will fall through to disk silently.
+There is currently no startup assertion that validates the volatile-mount invariant.
+
+== Claim 2: Theory-of-Constraints Multi-SA Parallel Transfer
+
+[quote, README]
+____
+Parallel Streaming: 32+ concurrent transfers with multi-thread streams
+____
+
+*How it works:* `apps/laminar_web/lib/laminar/credential_pool.ex` manages a pool of Google Drive
+service accounts. Each SA gets a dedicated worker via `apps/laminar_web/lib/laminar/parallel_transfer.ex`,
+which implements a Theory of Constraints approach: it enumerates the full file manifest first
+(largest files first to minimise API calls per GB), then assigns files to whichever SA worker has
+remaining daily quota. The Broadway 4-lane pipeline (`pipeline.ex`) routes files to lanes: ghost
+(URL stubs for very large files), express (small passthrough), squeeze (text compression), and
+refine (format conversion via the Refinery container). Quota rotation allows 10 SAs to achieve
+7.5 TB/day vs. 750 GB/day for a single SA.
+
+*Honest caveat:* The SA rotation pattern is a documented Google Drive pattern but carries
+operational risk: credential management, quota tracking state, and per-SA rate-limiting all require
+careful production configuration. The `CredentialPool` GenServer persists quota state in-process
+only; a restart resets quotas to zero, which can cause unexpected quota exceedance after a crash.
+Persistent quota tracking is listed as a future enhancement.
+
+== Dogfooded Across The Account
+
+[cols="1,2,1"]
+|===
+| Repo | How Laminar is used | Status
+
+| `laminar` itself
+| `just panic` runs panic-attack pre-commit scan; `just build-all` builds the Refinery container
+| Active
+
+| `infrastructure-automation`
+| Laminar's multi-SA pattern is referenced as a migration approach for bulk data moves
+| Reference
+
+| `developer-ecosystem`
+| Rclone integration patterns from Laminar inform the ecosystem's cloud storage tooling
+| Conceptual
+|===
+
 == File Map
 
-[cols="1,2"]
+[cols="1,3"]
 |===
 | Path | What's There
 
-| `test(s)/` | Test suite
+| `apps/laminar_web/lib/laminar_web/schema.ex`
+| Absinthe GraphQL schema: `transfer_job`, `stream_config`, `system_stats`, mutation/subscription types
+
+| `apps/laminar_web/lib/laminar_web/schema/types.ex`
+| Absinthe custom scalar and enum types (`job_status`, etc.)
+
+| `apps/laminar_web/lib/laminar/credential_pool.ex`
+| GenServer managing multiple Google Drive service accounts with per-SA quota tracking
+
+| `apps/laminar_web/lib/laminar/parallel_transfer.ex`
+| TOC-optimised coordinator: enumerates manifest, assigns files largest-first to SA workers
+
+| `apps/laminar_web/lib/laminar/intelligence.ex`
+| File routing decision engine: content-aware lane assignment (ghost/express/squeeze/refine)
+
+| `apps/laminar_web/lib/laminar/pipeline.ex`
+| Broadway 4-lane pipeline processor
+
+| `apps/laminar_web/lib/laminar/rclone_client.ex`
+| Rclone RC API client (HTTP JSON-RPC); data-plane interface
+
+| `apps/laminar_web/lib/laminar/cli.ex`
+| CLI interface for `credentials`, `parallel`, `stream`, `ls`, `health` commands
+
+| `apps/laminar_web/lib/laminar/ghost_linker.ex`
+| URL stub creation for very large files (avoids transfer, creates shareable link)
+
+| `apps/laminar_web/lib/laminar_web/router.ex`
+| Phoenix router: GraphQL endpoint + WebSocket channels
+
+| `apps/laminar_web/lib/laminar_web/application.ex`
+| OTP supervision tree: starts CredentialPool, Broadway pipeline, endpoint
+
+| `ffi/zig/`
+| Zig FFI layer (planned ABI bridge; present as scaffolding)
+
+| `config/`
+| Phoenix environment configs (dev, test, prod, runtime)
+
+| `containers/`
+| Containerfile for Refinery format-conversion sidecar (Chainguard Wolfi base)
+
+| `scripts/`
+| `install.osh` — system setup: tmpfs mounts, network tuning (TCP BBR, buffer sizes)
+
+| `docs/TOC-ANALYSIS.md`
+| Theory of Constraints analysis: constraint identification and subordination strategy
+
+| `Justfile`
+| Recipes: `up`, `start-brain`, `build-all`, `tune-network`, `setup-remotes`, `panic`
+
+| `.github/workflows/`
+| RSR-standard CI: CodeQL, Hypatia, Scorecard, quality, mirror workflows
+
+| `.machine_readable/6a2/`
+| A2ML machine-readable artefacts (STATE, META, ECOSYSTEM, AGENTIC, NEUROSYM, PLAYBOOK)
 |===
 
 == Questions?
 
-Open an issue or reach out directly — happy to explain anything in more detail.
+Open an issue or reach out to Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>.
