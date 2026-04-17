@@ -84,3 +84,8 @@ htmlcov/
 
 # asdf version manager
 .tool-versions
+target/
+node_modules/
+.cache/
+build/
+dist/
