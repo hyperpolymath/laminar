@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: PMPL-1.0-or-later
+// SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 //
-// Laminar V-lang API — Pipeline orchestration client.
+// Laminar zig API — Pipeline orchestration client.
 module laminar
 
 pub enum StageState {
