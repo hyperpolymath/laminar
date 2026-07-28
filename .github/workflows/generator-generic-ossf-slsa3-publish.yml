@@ -12,6 +12,7 @@
 # For more information about SLSA and how it improves the supply-chain, visit slsa.dev.
 
 permissions:
+  actions: read
   contents: read
 
 name: SLSA generic generator
