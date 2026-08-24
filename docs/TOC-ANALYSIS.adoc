@@ -1,18 +1,19 @@
-# Theory of Constraints Analysis: Laminar File Transfer
+== Theory of Constraints Analysis: Laminar File Transfer
 
-## The Five Focusing Steps
+=== The Five Focusing Steps
 
-1. **IDENTIFY** the constraint
-2. **EXPLOIT** the constraint (maximize its output)
-3. **SUBORDINATE** everything else to the constraint
-4. **ELEVATE** the constraint (add capacity if still bottlenecked)
-5. **REPEAT** (find the new constraint)
+[arabic]
+. *IDENTIFY* the constraint
+. *EXPLOIT* the constraint (maximize its output)
+. *SUBORDINATE* everything else to the constraint
+. *ELEVATE* the constraint (add capacity if still bottlenecked)
+. *REPEAT* (find the new constraint)
 
----
+'''''
 
-## Current System Flow
+=== Current System Flow
 
-```
+....
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         LAMINAR TRANSFER PIPELINE                            │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -37,13 +38,13 @@
 │                   └───────┘         └───────┘                              │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
-```
+....
 
----
+'''''
 
-## Capacity Analysis (Per Stage)
+=== Capacity Analysis (Per Stage)
 
-```
+....
 STAGE           THEORETICAL MAX    PRACTICAL MAX    YOUR OBSERVED
 ─────────────────────────────────────────────────────────────────
 1. Listing      ~1000 files/sec    ~200 files/sec   ? (not measured)
@@ -56,15 +57,15 @@ Per-Day Limits:
 Dropbox API     Unlimited*         ~10TB/day        Not the limit
 Google Upload   750 GB/SA/day      750 GB/SA/day    ← HARD CEILING
 Network         10 Gbps fiber      ~1 GB/s          Not the limit
-```
+....
 
----
+'''''
 
-## Constraint Identification
+=== Constraint Identification
 
-### Scenario A: Single Service Account (Current)
+==== Scenario A: Single Service Account (Current)
 
-```
+....
                     CONSTRAINT
                         │
                         ▼
@@ -77,11 +78,11 @@ Network         10 Gbps fiber      ~1 GB/s          Not the limit
 Bottleneck: Google Drive 750GB/day quota
 Throughput: 750GB / 86400s = 8.7 MB/s sustained (if spreading across day)
             750GB / 8hrs = 26 MB/s (if transferring 8hrs/day)
-```
+....
 
-### Scenario B: Multiple Service Accounts (N = 4)
+==== Scenario B: Multiple Service Accounts (N = 4)
 
-```
+....
                                             PARALLEL UPLOADS
                                                    │
 ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌───────┴───────┐
@@ -96,11 +97,11 @@ Throughput: 750GB / 86400s = 8.7 MB/s sustained (if spreading across day)
                                               = 3TB/day
 
 Bottleneck shifts to: DOWNLOAD from Dropbox (single source)
-```
+....
 
-### Scenario C: N Service Accounts + Parallel Download
+==== Scenario C: N Service Accounts + Parallel Download
 
-```
+....
      ┌──────────────────┐         ┌──────────────────┐
      │  PARALLEL PULL   │         │  PARALLEL PUSH   │
      │   (8 streams)    │         │   (N × SAs)      │
@@ -117,13 +118,13 @@ Bottleneck shifts to: DOWNLOAD from Dropbox (single source)
            /file    aggregate     /core   /conn   /day
 
 NEW BOTTLENECK: Network bandwidth OR Dropbox rate limits
-```
+....
 
----
+'''''
 
-## The Constraint Migration Path
+=== The Constraint Migration Path
 
-```
+....
 Step 1: You are HERE
 ────────────────────
 Constraint: Google Drive 750GB/day (single SA)
@@ -147,17 +148,18 @@ Step 4: After Sorting Optimization
 Constraint: Physical network bandwidth
 Action: Nothing more to do (you've hit physics)
 Result: THEORETICAL MAXIMUM ACHIEVED
-```
+....
 
----
+'''''
 
-## Subordination Analysis
+=== Subordination Analysis
 
-Everything should be subordinated to the constraint. Here's what that means:
+Everything should be subordinated to the constraint. Here’s what that
+means:
 
-### When Upload Quota is the Constraint (Single SA)
+==== When Upload Quota is the Constraint (Single SA)
 
-```
+....
 SUBORDINATION RULES:
 ─────────────────────
 1. Listing:    RUN AHEAD - enumerate everything before upload starts
@@ -172,11 +174,11 @@ SUBORDINATION RULES:
 4. Upload:     THE KING - everything serves this
                Never starve, never overload
                Track quota precisely, pause gracefully at limit
-```
+....
 
-### When Download is the Constraint (Multiple SAs)
+==== When Download is the Constraint (Multiple SAs)
 
-```
+....
 SUBORDINATION RULES:
 ─────────────────────
 1. Listing:    COMPLETE FIRST - full manifest before any transfer
@@ -192,13 +194,13 @@ SUBORDINATION RULES:
 4. Upload:     FOLLOW DOWNLOAD - start as soon as data available
                Never accumulate more than buffer size
                Round-robin across SAs
-```
+....
 
----
+'''''
 
-## Process Flow With Subordination Points
+=== Process Flow With Subordination Points
 
-```
+....
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                     OPTIMIZED FLOW (MULTI-SA MODE)                              │
 ├─────────────────────────────────────────────────────────────────────────────────┤
@@ -262,13 +264,13 @@ SUBORDINATION RULES:
 │   └────────────────────────────────────────────────────┘                        │
 │                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
-```
+....
 
----
+'''''
 
-## Throughput Calculation by Scenario
+=== Throughput Calculation by Scenario
 
-```
+....
 ┌────────────────────────────────────────────────────────────────────────────────┐
 │                        THROUGHPUT PROJECTIONS                                  │
 ├────────────────────────────────────────────────────────────────────────────────┤
@@ -296,13 +298,13 @@ SUBORDINATION RULES:
 │  5TB @ 125 MB/s = 11.4 hours                                                   │
 │                                                                                │
 └────────────────────────────────────────────────────────────────────────────────┘
-```
+....
 
----
+'''''
 
-## Implementation Priority (Based on TOC)
+=== Implementation Priority (Based on TOC)
 
-```
+....
 PRIORITY ORDER (Exploit before Elevate):
 ────────────────────────────────────────
 
@@ -330,13 +332,13 @@ PRIORITY ORDER (Exploit before Elevate):
    - Fire-and-forget uploads
    - Background checksum validation
    - Retry queue for failures
-```
+....
 
----
+'''''
 
-## Key Metrics to Monitor
+=== Key Metrics to Monitor
 
-```
+....
 CONSTRAINT INDICATORS:
 ─────────────────────
 
@@ -348,4 +350,4 @@ Upload queue full, not moving   → Upload rate/network
 CPU at 100%                     → Transform (skip compression)
 Memory exhausted                → Buffer size (reduce)
 403 Too Many Requests           → API rate limit (add backoff)
-```
+....
