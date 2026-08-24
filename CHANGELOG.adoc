@@ -1,69 +1,75 @@
-// SPDX-License-Identifier: CC-BY-SA-4.0
-// SPDX-FileCopyrightText: 2025 Laminar Contributors
+== Changelog
 
-= Changelog
-:toc:
+All notable changes to `+laminar+` will be documented in this file.
 
-All notable changes to Laminar will be documented in this file.
+This file is generated from conventional commits by the
+https://github.com/hyperpolymath/standards/blob/main/.github/workflows/changelog-reusable.yml[`+changelog-reusable.yml+`]
+workflow (`+hyperpolymath/standards#206+`). Adopt the workflow in this
+repo’s CI to keep this file in sync automatically — see
+https://github.com/hyperpolymath/standards/blob/main/templates/cliff.toml[`+templates/cliff.toml+`]
+for the canonical config.
 
-The format is based on https://keepachangelog.com/en/1.1.0/[Keep a Changelog],
-and this project adheres to https://semver.org/spec/v2.0.0.html[Semantic Versioning].
+The format follows https://keepachangelog.com/en/1.1.0/[Keep a
+Changelog]; this project aims to follow
+https://semver.org/spec/v2.0.0.html[Semantic Versioning].
 
-== [Unreleased]
+=== [Unreleased]
 
-=== Added
-- Placeholder for upcoming features
+==== Added
 
-== [1.0.0] - 2025-11-27
+* feat(crg): add crg-grade and crg-badge justfile recipes
+* feat: add stapeln.toml container definition
+* feat: deploy UX Manifesto infrastructure
+* feat: add Idris2 ABI, Zig FFI, and V-lang API
+* feat: add Groove discovery manifest
+* feat: update CLI, rclone client, and mix config
+* feat: add CLADE.a2ml — clade taxonomy declaration
+* feat: add AI Gatekeeper Protocol manifest
+* feat(ci): enable Hypatia scanning
 
-=== Added
+==== Fixed
 
-==== Core Features
-- Cloud-to-cloud streaming relay architecture
-- Zero-persistence data transfer (RAM + NVMe caching)
-- Parallel streaming with 32+ concurrent transfers
-- Multi-thread streams for large files (BitTorrent-style logic)
+* fix(ci): bump a2ml/k9-validate-action pins to canonical (#24)
+* fix(ci): sync hypatia-scan.yml to canonical (#23)
+* fix(ci): adopt canonical hypatia-scan.yml (#22)
+* fix(ci): Phase-2 fleet submission must not fail the security gate
+(#21)
+* fix(scorecard): enforce granular permissions and add fuzzing
+placeholder
+* fix(ci): Resolve workflow-linter self-matching and metadata issues
+* fix: remove duplicate SCM files from root
+* fix(security): ERR-WF-008 and ERR-WF-009 fixes
+* fix: correct author name in CITATION.cff
+* fix: align CodeQL with repo languages (robot-cleaner)
 
-==== Intelligence Engine
-- Pattern-matching rule system for file decisions
-- Automatic filtering of build artifacts (node_modules, _build, target)
-- OS junk removal (.DS_Store, Thumbs.db)
-- Ghost Links for files > 5GB
-- Format conversion support (WAV→FLAC, BMP→WebP)
-- Compression for large text files (Zstd)
+==== Changed
 
-==== Control Plane (Elixir)
-- GraphQL API with Absinthe
-- Real-time subscriptions for transfer progress
-- REST API fallback endpoints
-- Broadway-based 4-lane processing pipeline
-
-==== Data Plane (Rclone)
-- Integration with 40+ cloud providers
-- Rclone RC API client
-- Checksum verification
-- Resume capability via checkpoint caching
-
-==== Infrastructure
-- Podman containers with Chainguard Wolfi base
-- Network physics optimization (TCP BBR, GRO/LRO tuning)
-- Tiered storage (RAM Tier 1, NVMe Tier 2)
-- Oil Shell installer script
+* refactor: migrate 6SCM → 6A2 (.scm → .a2ml format)
 
 ==== Documentation
-- Comprehensive wiki with user and developer guides
-- AsciiDoc format throughout
-- CLAUDE.adoc for AI-assisted development
-- Cookbook with tuning recipes
 
-=== Security
-- Non-root container execution
-- Credentials never in container images
-- TLS for all cloud connections
-- eDNS for CDN optimization
+* docs: substantive CRG C annotation (EXPLAINME.adoc)
+* docs: add TEST-NEEDS.md and/or PROOF-NEEDS.md from audit
+* docs: add EXPLAINME.adoc — prove-it file backing README claims
+* docs: add CONTRIBUTING.md
+* docs: add checkpoint files for state tracking
 
-== [0.1.0] - 2025-11-27
+==== CI
 
-=== Added
-- Initial project structure
-- Proof of concept implementation
+* ci: redistribute concurrency-cancel guard to read-only check workflows
+(#26)
+* ci: bump actions/upload-artifact SHA to current v4 (#19)
+* ci: SHA-pin hyperpolymath validate-actions in dogfood-gate
+* ci: wire hypatia-scan.yml to query own Dependabot alerts
+* ci: deploy dogfood-gate, add CRG tests and Groove manifest, update CI
+config
+
+=== Pre-history
+
+Prior commits to this file’s introduction are recorded in git history
+but not formally classified into Keep-a-Changelog sections. To backfill,
+run `+git cliff -o CHANGELOG.md+` locally using the canonical
+https://github.com/hyperpolymath/standards/blob/main/templates/cliff.toml[`+cliff.toml+`]
+— this is one-shot mechanical work.
+
+'''''
