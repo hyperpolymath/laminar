@@ -1,0 +1,42 @@
+== PROOF-NEEDS.md — laminar
+
+=== Current State
+
+* **src/abi/*.idr**: YES — `+Types.idr+`
+* *Dangerous patterns*: 0 in own code (hits are all in deps/ — Phoenix,
+Absinthe, Credo, Mint)
+* *LOC*: ~252,000 (Elixir + deps)
+* *ABI layer*: Minimal Idris2 types
+
+=== What Needs Proving
+
+[width="100%",cols="51%,27%,22%",options="header",]
+|===
+|Component |What |Why
+|GraphQL schema validation |Absinthe schema produces valid responses
+|Malformed GraphQL responses break all clients
+
+|Authentication/authorization |Access control decisions are correct and
+complete |Auth bypass is a critical vulnerability
+
+|Data flow integrity |Pipeline transformations preserve data invariants
+|Data corruption in transit affects all downstream
+
+|WebSocket channel safety |Channel join/leave state machine is correct
+|Race conditions in real-time channels lose messages
+
+|ABI type coverage |Extend Types.idr beyond minimal definitions |Current
+ABI layer is a skeleton
+|===
+
+=== Recommended Prover
+
+*Idris2* — Extend `+src/abi/Types.idr+` with auth decision proofs and
+data pipeline invariants. Elixir property-based testing (StreamData) for
+runtime validation.
+
+=== Priority
+
+*MEDIUM* — Large Elixir web application. Auth and data integrity are the
+critical proof targets. Most of the LOC is in deps which are
+third-party.
