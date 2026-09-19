@@ -131,7 +131,7 @@ See `config/config.json` for runtime configuration and `config/filters.txt` for 
 * link:cookbook.adoc[Cookbook] - Detailed recipes and tuning guides
 * link:CLAUDE.adoc[AI Assistant Guide] - For AI-assisted development
 * link:SECURITY.adoc[Security] - Security policies and practices
-* link:CONTRIBUTING.adoc[Contributing] - How to contribute
+* link:.github/CONTRIBUTING.md[Contributing] - How to contribute
 
 == License
 
