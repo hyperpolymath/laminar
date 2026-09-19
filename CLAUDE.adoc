@@ -253,7 +253,7 @@ lsof -i :4000
 
 == Contributing
 
-1. Read `CONTRIBUTING.adoc`
+1. Read `.github/CONTRIBUTING.md`
 2. Fork and create feature branch
 3. Write tests for new functionality
 4. Run `just test` and `just format`

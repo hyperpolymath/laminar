@@ -73,6 +73,6 @@ This document outlines planned features and improvements for Laminar.
 
 == Contributing
 
-Want to help with any of these features? See link:CONTRIBUTING.adoc[Contributing Guide].
+Want to help with any of these features? See link:.github/CONTRIBUTING.md[Contributing Guide].
 
 Feature requests and votes welcome via GitHub Issues.
