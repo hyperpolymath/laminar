@@ -259,8 +259,8 @@ root_folder_id =
 [s3]
 type = s3
 provider = AWS
-access_key_id = AKIAIOSFODNN7EXAMPLE
-secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+access_key_id = YOUR_ACCESS_KEY
+secret_access_key = YOUR_SECRET_KEY
 region = us-east-1
 ----
 
